@@ -1,0 +1,24 @@
+{
+  "name": "beto-todo",
+  "main": "src/worker_beto_todo.js",
+  "workers_dev": true,
+  "preview_urls": true,
+  "compatibility_date": "2025-01-01",
+  "keep_vars": true,
+  "routes": [
+    {
+      "pattern": "lacartamenu.com/*",
+      "zone_name": "lacartamenu.com"
+    },
+    {
+      "pattern": "*.lacartamenu.com/*",
+      "zone_name": "lacartamenu.com"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FOTOS",
+      "bucket_name": "beto-tickets"
+    }
+  ]
+}
