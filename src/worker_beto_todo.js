@@ -13111,6 +13111,22 @@ if (P) {
 </html>
 `;
 
+var HTML_SIMULAR_YA = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dibujando</title></head>
+<body style="margin:0;font-family:system-ui,Arial,sans-serif;background:#f4f1ec;color:#1d1a17"><div style="max-width:420px;margin:0 auto;padding:56px 22px;text-align:center">
+<div style="font-size:44px">&#10024;</div><h1 style="font-size:21px" id="t">Dibujando cómo se vería…</h1><p id="d" style="color:#5d5549">Tarda unos 30 segundos. No cierres esta pantalla.</p></div>
+<script>
+(function(){
+  var Q = new URLSearchParams(location.search);
+  fetch("/beto-guarda", { method: "POST", headers: {"content-type": "application/json"},
+    body: JSON.stringify({ c: "soporte", tipo: "soporte_simular", datos: { p: Q.get("p"), s: Q.get("s"), id: Q.get("id") } }) })
+  .then(function(r){ return r.json(); })
+  .then(function(r){
+    if (r && r.ok && r.liga) { location.replace(r.liga); return; }
+    document.getElementById("t").textContent = "No se pudo dibujar";
+    document.getElementById("d").textContent = (r && r.error) || "Intenta otra vez.";
+  }).catch(function(){ document.getElementById("t").textContent = "Se cortó el internet"; document.getElementById("d").textContent = "Vuelve a tocar el botón."; });
+})();
+</script></body></html>`;
 var HTML_SOPORTE = `<!doctype html>
 <html lang="es">
 <head>
@@ -32838,11 +32854,78 @@ async function enlazarPromotorRed(env, chatId, code, sello) {
     [{ columnName: "id", condition: "eq", value: fila.id }],
     { notas: (limpias ? limpias + " " : "") + "TG: " + String(chatId) }
   );
-  await tgRedEnviar(env, chatId, "✅ Listo, " + fila.negocio + ".\nAquí te van a caer tus avisos: altas, comisiones y tu pago.");
+  await tgRedEnviar(env, chatId, "✅ Listo, " + fila.negocio + ".\nAquí te van a caer tus avisos.\n\n\u{1F3A4} Y aquí mismo soy tu soporte: mándame una nota de voz o escríbeme lo que te pregunten los clientes.");
   await avisaEdsiRed(env, "\u{1F517} " + fila.negocio + " (" + String(fila.promotor).toUpperCase() + ") conectó su Telegram.");
   return { ok: true, enlazado: true };
 }
 __name(enlazarPromotorRed, "enlazarPromotorRed");
+async function promotorPorChat(env, chatId) {
+  const id = String(chatId || "").trim();
+  if (!id) return null;
+  const filas = await traerCon(env, TABLA_CLIENTES, [{ columnName: "producto", condition: "eq", value: "promotor" }]);
+  const f = filas.map(limpiaCliente).find((x) => esFilaPromotor(x) && pedazoDe(x.notas, "TG:") === id);
+  return f ? { code: String(f.promotor || "").toUpperCase(), nombre: String(f.negocio || "") } : null;
+}
+/* La nota de voz a texto. Telegram la manda en OGG; OpenAI la entiende. */
+async function vozATexto(env, fileId) {
+  const token = String(env.TG_RED || "").trim();
+  const rf = await fetch(TELEGRAM + token + "/getFile?file_id=" + encodeURIComponent(fileId));
+  const jf = await rf.json();
+  const camino = jf && jf.result && jf.result.file_path;
+  if (!camino) throw new Error("no pude bajar tu audio");
+  const audio = await (await fetch("https://api.telegram.org/file/bot" + token + "/" + camino)).arrayBuffer();
+  const forma = new FormData();
+  forma.append("file", new Blob([audio], { type: "audio/ogg" }), "voz.ogg");
+  forma.append("model", "gpt-4o-mini-transcribe");
+  forma.append("language", "es");
+  const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST", headers: { authorization: "Bearer " + String(env.OPENAI_KEY || "").trim() }, body: forma
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j || !j.text) throw new Error("no te entendí el audio (" + r.status + "). Mándalo otra vez o escríbelo.");
+  return String(j.text).trim();
+}
+async function soporteTelegram(env, msg, promo, origen) {
+  const chatId = String(msg.chat.id);
+  const sello = await selloPromotor(env, promo.code);
+  const firma = "?p=" + encodeURIComponent(promo.code) + "&s=" + encodeURIComponent(sello);
+  const base = origen || "https://lacartamenu.com";
+  let texto = String(msg.text || msg.caption || "").trim();
+  if (Array.isArray(msg.photo) && msg.photo.length && !texto) {
+    await tgRedEnviar(env, chatId, "\u{1F4F7} Para la demostración con la foto del menú, usa <b>La magia</b>: ahí le tomas la foto y queda lista la mesa y la cocina.", "✨ Abrir La magia", base + "/magia" + firma);
+    return { ok: true, soporte_tg: "foto" };
+  }
+  const voz = msg.voice || msg.audio;
+  if (voz && voz.file_id) {
+    try {
+      texto = await vozATexto(env, voz.file_id);
+      await tgRedEnviar(env, chatId, "\u{1F3A4} Entendí: <i>" + texto.replace(/[<>&]/g, "") + "</i>");
+    } catch (e) {
+      await tgRedEnviar(env, chatId, String(e && e.message || e));
+      return { ok: true, soporte_tg: "voz_mal" };
+    }
+  }
+  if (!texto || /^\/start\b/i.test(texto) || /^(hola|buenas|que tal|qu\xE9 tal|ayuda)\W*$/i.test(texto)) {
+    await tgRedEnviar(env, chatId, "Hola, " + promo.nombre + ". Aquí soy tu soporte.\n\n" +
+      "\u{1F3A4} Mándame una <b>nota de voz</b> o escríbeme lo que te pregunten los clientes, y te contesto.\n" +
+      "❓ Lo que no sé, se lo pregunto a Edsi y te aviso aquí.\n" +
+      "✨ Si piden algo que no existe, te dibujo cómo se vería para que se lo enseñes.\n" +
+      "\u{1F4F7} Para la demostración, usa La magia en tu pantalla.", "\u{1F4F1} Abrir mi pantalla", base + "/yo" + firma);
+    return { ok: true, soporte_tg: "ayuda" };
+  }
+  const r = await soportePregunta(env, "soporte", { p: promo.code, s: sello, pregunta: texto });
+  const idSim = r.pendiente || (r.simulable ? r.id : "");
+  const botonSim = idSim ? base + "/simular-ya" + firma + "&id=" + encodeURIComponent(idSim) : "";
+  if (r.pendiente) {
+    await tgRedEnviar(env, chatId, "<b>Eso no lo sé seguro, y no te voy a inventar.</b> Ya se lo pregunté a Edsi; su respuesta te llega aquí.\n\n" +
+      "Mientras, con el cliente di: <i>“Eso se lo confirmo con mi jefe ahorita mismo, \xBFme da su WhatsApp?”</i>",
+      "✨ Enseñarle cómo se vería", botonSim);
+  } else {
+    await tgRedEnviar(env, chatId, String(r.respuesta || "").replace(/[<>&]/g, ""),
+      botonSim ? "✨ Enseñarle cómo se vería" : "", botonSim);
+  }
+  return { ok: true, soporte_tg: true };
+}
 async function telegramRedEntrante(env, cuerpo, origen) {
   const msg = cuerpo && (cuerpo.message || cuerpo.edited_message) || {};
   const chatId = msg.chat && msg.chat.id;
@@ -32855,6 +32938,13 @@ async function telegramRedEntrante(env, cuerpo, origen) {
   const arranque = texto.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Z0-9]{2,14})-([0-9a-f]{12})\s*$/i);
   if (arranque) {
     return await enlazarPromotorRed(env, chatId, String(arranque[1]).toUpperCase(), arranque[2]);
+  }
+  try {
+    const promo = await promotorPorChat(env, chatId);
+    if (promo) return await soporteTelegram(env, msg, promo, origen);
+  } catch (e) {
+    await tgRedEnviar(env, chatId, "No se pudo: " + String(e && e.message || e).slice(0, 160) + "\nIntenta otra vez en un momento.");
+    return { ok: true, soporte_tg: "error" };
   }
   const kena = String(env.KENA_URL || "").trim();
   if (kena) {
@@ -36151,7 +36241,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.16";  // version: "2.9.16"
+var VERSION_BETO = "2.9.17";  // version: "2.9.17"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39636,6 +39726,7 @@ await chatAvisar(env, cfg,
       return new Response(JSON.stringify({
         name: donde === "/yo" ? "Mi herramienta · Beto" : "Mi ronda · Beto",
         short_name: donde === "/yo" ? "Mi Beto" : "Mi ronda",
+        ...(donde === "/yo" ? { id: "/yo" } : {}),
         start_url: arranque,
         scope: "/",
         display: "standalone",
@@ -39745,6 +39836,9 @@ await chatAvisar(env, cfg,
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
+    }
+    if (ruta === "/simular-ya") {
+      return new Response(HTML_SIMULAR_YA, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
     }
     if (ruta === "/simulacion") {
       /* La dibujo una IA: se sirve sin JavaScript y en caja aislada. */
