@@ -35560,7 +35560,7 @@ async function soportePregunta(env, clave, d) {
   const sabido = await soporteSabido(env);
   let dicho = null;
   try { dicho = await soporteCerebro(env, pregunta, sabido); } catch (e) { dicho = null; }
-  if (!dicho) {
+  if (!dicho || dicho.no_se) {
     const b = soporteBusca(pregunta, sabido);
     if (b) dicho = b;
   }
@@ -36093,7 +36093,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.9";  // version: "2.9.9"
+var VERSION_BETO = "2.9.10";  // version: "2.9.10"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
