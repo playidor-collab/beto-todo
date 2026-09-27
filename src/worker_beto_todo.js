@@ -35597,7 +35597,7 @@ async function soporteCerebro(env, pregunta, sabido) {
   const res = await llamarOjo(env, {
     model: MODELO_OJO,
     messages: [
-      { role: "system", content: "Eres el soporte de un vendedor de La Carta (Comandero C1). Contesta en español sencillo, corto, de tú, SOLO con estos hechos. Si la respuesta no está en los hechos, contesta exactamente NO_SE. Nunca inventes precios, plazos, funciones ni fechas.\n\nHECHOS:\n" + hechos },
+      { role: "system", content: "Eres el soporte de un vendedor de La Carta (Comandero C1). Contesta en español sencillo, corto, de tú, en texto plano (sin asteriscos, sin negritas, sin #), SOLO con estos hechos. Si la respuesta no está en los hechos, contesta exactamente NO_SE. Nunca inventes precios, plazos, funciones ni fechas.\n\nHECHOS:\n" + hechos },
       { role: "user", content: String(pregunta) }
     ],
     max_completion_tokens: 350
@@ -35608,7 +35608,7 @@ async function soporteCerebro(env, pregunta, sabido) {
   const dicho = String(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || "").trim();
   if (!dicho) return null;
   if (/NO_SE/.test(dicho)) return { no_se: true };
-  return { r: dicho, fuente: "base" };
+  return { r: dicho.replace(/**/g, "").replace(/^#+s*/gm, "").trim(), fuente: "base" };
 }
 async function soportePregunta(env, clave, d) {
   const yo = await soporteQuien(env, d);
@@ -36151,7 +36151,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.14";  // version: "2.9.14"
+var VERSION_BETO = "2.9.15";  // version: "2.9.15"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
