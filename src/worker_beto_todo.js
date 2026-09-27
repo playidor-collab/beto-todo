@@ -1252,6 +1252,11 @@ if (PARA_MESERO) {
 </header>
 <div id="err"></div>
 <div id="avisoPapel" class="papelOff oculto">El papel <b>NO</b> sale solo. Toca &#128424; en la comanda que quieras imprimir.</div>
+<div id="conectaGrande" class="oculto" style="margin:14px;padding:20px 16px;border:2px dashed #d98324;border-radius:18px;text-align:center">
+  <button id="bImpreGrande" type="button" style="width:100%;min-height:64px;border:0;border-radius:14px;background:#d98324;color:#1b1206;font:900 20px system-ui;cursor:pointer">&#128424; Conectar la impresora</button>
+  <div style="margin-top:10px;font-size:14px;color:#aab4be">Para que las comandas salgan solas en papel.</div>
+  <button id="bImpreNo" type="button" style="margin-top:10px;border:0;background:none;color:#8a939d;font:600 13px system-ui;text-decoration:underline;cursor:pointer">Ahora no</button>
+</div>
 <main id="tablero"><div class="vacio">Cargando comandas...</div></main>
 <script>
 /* ---------------------------------------------------------------------------
@@ -1671,6 +1676,18 @@ function avisaImpresora(texto, mal){
     b.className = ok ? "oido on" : "oido";
     b.innerHTML = ok ? "\u{1F5A8} " + IMPRESORA_WEB.nombre : "\u{1F5A8} Conectar impresora";
   }
+  /* EL BOTON GRANDE: el mismo camino que el de arriba, pero a la vista. */
+  var grande = document.getElementById("conectaGrande"), noAhora = false;
+  try { noAhora = window.sessionStorage.getItem("beto_sin_impre_" + CLAVE) === "1"; } catch (e) {}
+  function pintaGrande(){ if (grande) grande.classList.toggle("oculto", !!IMPRESORA_WEB.lista || noAhora); }
+  document.getElementById("bImpreGrande").addEventListener("click", function(){ b.click(); });
+  document.getElementById("bImpreNo").addEventListener("click", function(){
+    noAhora = true;
+    try { window.sessionStorage.setItem("beto_sin_impre_" + CLAVE, "1"); } catch (e) {}
+    pintaGrande();
+  });
+  setInterval(pintaGrande, 1000);
+  pintaGrande();
   IMPRESORA_WEB.alCambiar = function(){
     pinta();
     if (!IMPRESORA_WEB.lista) avisaImpresora("Se desconect\u00f3 la impresora. Las comandas ya no salen solas: vuelve a conectarla.", true);
@@ -36492,7 +36509,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.22";  // version: "2.9.22"
+var VERSION_BETO = "2.9.23";  // version: "2.9.23"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
