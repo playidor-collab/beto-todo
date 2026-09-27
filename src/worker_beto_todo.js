@@ -13200,11 +13200,25 @@ var HTML_SOPORTE = `<!doctype html>
       if (r.pendiente) {
         espera.className = "msg el pend";
         espera.innerHTML = "<b>Eso no lo sé seguro, y no te voy a inventar.</b> Ya se lo mandé a Edsi. Cuando conteste, te aparece en <b>Mis dudas</b>." +
-          "<small>Mientras, con el cliente di: “Eso se lo confirmo con mi jefe ahorita mismo, ¿me da su WhatsApp?”</small>";
+          "<small>Mientras, con el cliente di: “Eso se lo confirmo con mi jefe ahorita mismo, ¿me da su WhatsApp?”</small>" +
+          "<button class='mic2' style='margin-top:10px' data-sim='" + esc(r.pendiente) + "'>✨ Enseñarle cómo se vería</button>";
+        var bs = espera.querySelector("[data-sim]");
+        bs.onclick = function(){ simula(this.getAttribute("data-sim"), this); };
       } else {
         espera.innerHTML = esc(r.respuesta) + "<small>" + (r.fuente === "edsi" ? "Esto lo contestó Edsi." : "Comprobado en el sistema.") + "</small>";
       }
     }).catch(function(){ espera.innerHTML = "Se cortó el internet. Vuelve a preguntar."; });
+  }
+  /* LA SIMULACION. Lo que el cliente pidio y no existe, dibujado para
+     ensenarselo. Tarda unos 20 o 30 segundos. */
+  function simula(id, b){
+    b.disabled = true; b.textContent = "Dibujándola… (unos 30 segundos)";
+    pide("soporte_simular", { id: id }).then(function(r){
+      if (!r || !r.ok) { b.disabled = false; b.textContent = "✨ Enseñarle cómo se vería"; alert((r && r.error) || "No se pudo. Intenta otra vez."); return; }
+      var a = document.createElement("a"); a.className = "btn full"; a.style.display = "flex"; a.style.alignItems = "center"; a.style.justifyContent = "center"; a.style.textDecoration = "none";
+      a.href = r.liga; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Abrir la simulación";
+      b.parentNode.replaceChild(a, b);
+    }).catch(function(){ b.disabled = false; b.textContent = "✨ Enseñarle cómo se vería"; alert("Se cortó el internet."); });
   }
   /* EL MICROFONO. Rolas habla mas facil de lo que escribe. Es el dictado de
      Chrome: gratis, en espanol, y sin limite: cuando el navegador corta por
@@ -13271,6 +13285,7 @@ var HTML_SOPORTE = `<!doctype html>
                "<br><span class='eti'>" + esc(String(x.fecha).slice(0, 10)) + "</span></div>";
         } else {
           h += "<div class='card'><b>" + esc(x.pregunta) + "</b>" + (x.respuesta ? esc(x.respuesta) : "Esperando a Edsi…") +
+               (x.simulacion ? "<br><a href='/simulacion?id=" + esc(x.simulacion) + "' target='_blank' rel='noopener'>✨ Ver la simulación</a>" : "") +
                "<br><span class='eti " + (x.respuesta ? "ok" : "") + "'>" + (x.respuesta ? "contestada" : "pendiente") + "</span></div>";
         }
       });
@@ -35574,6 +35589,66 @@ async function soporteVisita(env, clave, d) {
     (reg.nota ? "\nNota: " + reg.nota : ""));
   return { ok: true, tipo: "soporte_visita", id: reg.id };
 }
+var SIMULA_TOPE_DIA = 10;
+/* La IA con mas paciencia que llamarOjo: dibujar una pantalla tarda mas de 15 s. */
+async function soporteIA(env, cuerpo, segundos) {
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), segundos * 1e3);
+  try {
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + String(env.OPENAI_KEY || "").trim() },
+      body: JSON.stringify(cuerpo),
+      signal: control.signal
+    });
+    return { ok: r.ok, status: r.status, texto: await r.text() };
+  } catch (e) {
+    return { ok: false, status: 0, texto: String(e).slice(0, 200) };
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+var ORDEN_SIMULA = "Diseña UNA pantalla de celular para el sistema La Carta · Comandero C1, un mesero digital para restaurantes mexicanos: el cliente escanea el QR de su mesa, ve el menú con precios y pide; la comanda sale impresa en la cocina; el dueño cobra y hace su corte desde el celular. " +
+  "Un cliente pidió una función que el sistema TODAVÍA NO TIENE. Dibuja cómo se vería esa función dentro de la app. " +
+  "Reglas: un solo archivo HTML con CSS adentro. PROHIBIDO JavaScript, <script>, imágenes externas, fuentes externas o ligas. " +
+  "Estilo: fondo #f4f1ec, barra de arriba #1d2530 con letra blanca, botones naranja #d98324, tarjetas blancas con borde #e3ddd3 y esquinas redondas, letra system-ui. Ancho máximo 420px centrado. " +
+  "Textos en español de México, cortos y claros. Datos de ejemplo realistas: platillos mexicanos, nombres comunes, precios en pesos. " +
+  "Hasta arriba, antes que todo, una franja roja #c0392b con letra blanca en negritas que diga exactamente: SIMULACIÓN · Así podría verse · Todavía no existe. " +
+  "Devuelve SOLO el HTML completo, empezando con <!doctype html>, sin explicar nada.";
+async function soporteSimular(env, clave, d) {
+  const yo = await soporteQuien(env, d);
+  const id = String(d.id || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  const mios = await soporteTodos(env, yo.code);
+  const reg = mios.find((x) => x.id === id && x.tipo === "pregunta");
+  if (!reg) throw new Error("no encontré esa pregunta");
+  if (reg.simulacion) return { ok: true, tipo: "soporte_simular", liga: "/simulacion?id=" + reg.simulacion };
+  const hoy = isoMX().slice(0, 10);
+  const deHoy = mios.filter((x) => x.simulada && String(x.simulada).slice(0, 10) === hoy).length;
+  if (deHoy >= SIMULA_TOPE_DIA) throw new Error("hoy ya hiciste " + SIMULA_TOPE_DIA + " simulaciones. Mañana sigues.");
+  if (!env.OPENAI_KEY) throw new Error("el dibujante no está prendido; avísale a Edsi");
+  const res = await soporteIA(env, {
+    model: MODELO_OJO,
+    messages: [{ role: "system", content: ORDEN_SIMULA }, { role: "user", content: "Lo que pidió el cliente: " + reg.pregunta }],
+    max_completion_tokens: 6000
+  }, 90);
+  if (!res.ok) throw new Error(res.status === 0 ? "tardó demasiado en dibujarla. Intenta otra vez." : "no se pudo dibujar (error " + res.status + "). Avísale a Edsi.");
+  let j = null;
+  try { j = JSON.parse(res.texto); } catch (e) {}
+  let html = String(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || "");
+  const a = html.search(/<!doctype html/i), z = html.search(/<\/html>/i);
+  if (a === -1) throw new Error("no salió la pantalla. Intenta otra vez.");
+  html = html.slice(a, z > a ? z + 7 : undefined);
+  // Por si acaso: nada que corra.
+  html = html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi, "");
+  const simId = reg.id + Math.random().toString(36).slice(2, 6);
+  await env.FOTOS.put("simulaciones/" + simId + ".html", html, { httpMetadata: { contentType: "text/html; charset=utf-8" } });
+  reg.simulacion = simId; reg.simulada = isoMX(); reg.idea = true;
+  await soporteGuarda(env, reg);
+  const liga = "/simulacion?id=" + simId;
+  await avisaEdsiRed(env, "\u{1F4A1} <b>Idea pedida por un cliente</b> (lo preguntó " + yo.nombre + ")\n\n" + reg.pregunta +
+    "\n\nSimulación: https://lacartamenu.com" + liga + "\n#S" + reg.id);
+  return { ok: true, tipo: "soporte_simular", liga };
+}
 async function soporteLeer(env, clave, d) {
   const yo = await soporteQuien(env, d);
   const regs = (await soporteTodos(env, yo.code)).slice(0, 40);
@@ -35651,6 +35726,7 @@ var ESCRITURAS = {
   soporte_pregunta: soportePregunta,
   soporte_visita: soporteVisita,
   soporte_leer: soporteLeer,
+  soporte_simular: soporteSimular,
   pago_anual: pagoAnual,
   cobro_recordar: cobroRecordar,
   cupon_familia: cuponFamilia,
@@ -36017,7 +36093,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.8";  // version: "2.9.8"
+var VERSION_BETO = "2.9.9";  // version: "2.9.9"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39595,6 +39671,21 @@ await chatAvisar(env, cfg,
       return new Response(HTML_EVENTO, {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+      });
+    }
+    if (ruta === "/simulacion") {
+      /* La dibujo una IA: se sirve sin JavaScript y en caja aislada. */
+      const idSim = String(q.get("id") || "").replace(/[^a-z0-9]/g, "").slice(0, 30);
+      const obj = idSim ? await env.FOTOS.get("simulaciones/" + idSim + ".html") : null;
+      if (!obj) return new Response("Esa simulación no existe.", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+      return new Response(await obj.text(), {
+        status: 200,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "content-security-policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+          "x-content-type-options": "nosniff",
+          "cache-control": "no-store"
+        }
       });
     }
     if (ruta === "/soporte") {
