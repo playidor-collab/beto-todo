@@ -35442,6 +35442,91 @@ async function kitMensual(env, clave, d) {
     (d.efectivo ? "\n⚠️ Dijo que el ENGANCHE lo pagó EN EFECTIVO con el vendedor " + (reg.vendedor || "") + ". Confírmalo." : ""));
   return { ok: true, tipo: "kit_mensual", liga: String(j.init_point) };
 }
+var ATRASO_MAX_DIAS = 35;
+async function revisarSuscripciones(env, soloVer) {
+  const informe = [];
+  if (!hayMercadoPago(env)) return { ok: false, error: "sin llave de Mercado Pago", informe };
+  const regs = [];
+  let cursor;
+  for (let v = 0; v < 5; v++) {
+    const l = await env.FOTOS.list({ prefix: "suscripciones/", limit: 500, cursor });
+    for (const o of (l.objects || [])) {
+      const g = await env.FOTOS.get(o.key);
+      if (g) { try { regs.push(JSON.parse(await g.text())); } catch (e) {} }
+    }
+    if (!l.truncated) break;
+    cursor = l.cursor;
+  }
+  let clientes = [];
+  try { clientes = await traerCon(env, TABLA_CLIENTES, []); } catch (e) { return { ok: false, error: "no pude leer la tabla de clientes", informe }; }
+  const ahora = Date.now();
+  for (const reg of regs) {
+    if (!reg.preapproval) continue;
+    const renglon = { id: reg.id, negocio: reg.negocio };
+    let pre = null;
+    try {
+      const r = await fetch(MP_API + "/preapproval/" + encodeURIComponent(reg.preapproval), { headers: { authorization: "Bearer " + String(env.MP_TOKEN).trim() } });
+      if (r.ok) pre = await r.json();
+    } catch (e) { pre = null; }
+    if (!pre) { renglon.que = "mercado pago no contestó; no se toca"; informe.push(renglon); continue; }
+    const st = String(pre.status || "");
+    const sum = pre.summarized || {};
+    const pendientes = Number(sum.pending_charge_quantity || 0);
+    const semaforo = String(sum.semaphore || "");
+    const desde = Date.parse(sum.last_charged_date || (pre.auto_recurring && pre.auto_recurring.start_date) || "") || ahora;
+    const dias = (ahora - desde) / 864e5;
+    const debePausar = st === "paused" || st === "cancelled" || semaforo === "red" || (pendientes > 0 && dias > ATRASO_MAX_DIAS);
+    const alCorriente = st === "authorized" && pendientes === 0 && semaforo !== "red";
+    renglon.mp = st; renglon.pendientes = pendientes;
+    // El negocio, por telefono.
+    const tel = soloNumeros(reg.telefono).slice(-10);
+    const cli = clientes.find((c) => tel.length === 10 && soloNumeros(c.telefono).slice(-10) === tel &&
+      String(c.producto || "") !== "promotor" && String(c.clave || "") && String(c.clave) !== "buentaco");
+    if (!cli) {
+      if (st === "pending" && !reg.avisado_pendiente && ahora - Date.parse(reg.fecha || "") > 3 * 864e5) {
+        if (!soloVer) {
+          reg.avisado_pendiente = isoMX();
+          await env.FOTOS.put("suscripciones/" + reg.id + ".json", JSON.stringify(reg), { httpMetadata: { contentType: "application/json" } });
+          await avisaEdsiRed(env, "⏳ <b>" + reg.negocio + "</b> (" + reg.telefono + ") no ha activado su pago de $400 al mes. Háblale.");
+        }
+        renglon.que = "no activó su mensual; aviso a Edsi";
+      } else {
+        renglon.que = "todavía no hay negocio con ese teléfono en /socio";
+      }
+      informe.push(renglon); continue;
+    }
+    renglon.clave = cli.clave;
+    const notas = String(cli.notas || "");
+    const estado = String(cli.estado || "");
+    if (estado === "activo" && debePausar) {
+      renglon.que = "PAUSAR";
+      if (!soloVer) {
+        await actualizarFilas(env, TABLA_CLIENTES, [{ columnName: "id", condition: "eq", value: cli.id }],
+          { estado: "pausado", notas: (notas ? notas + " " : "") + "AUTOPAUSA" });
+        PAUSA_MEMORIA.delete(String(cli.clave).toLowerCase());
+        await avisaEdsiRed(env, "⏸️ Pausé a <b>" + reg.negocio + "</b> (" + cli.clave + "): Mercado Pago dice " + st +
+          (pendientes ? ", " + pendientes + " cobro(s) sin pagar" : "") + ". Se reactiva solo cuando pague.");
+      }
+    } else if (estado === "pausado" && /\bAUTOPAUSA\b/.test(notas) && alCorriente) {
+      renglon.que = "REACTIVAR";
+      if (!soloVer) {
+        await actualizarFilas(env, TABLA_CLIENTES, [{ columnName: "id", condition: "eq", value: cli.id }],
+          { estado: "activo", notas: notas.replace(/\s*\bAUTOPAUSA\b/g, "").trim() });
+        PAUSA_MEMORIA.delete(String(cli.clave).toLowerCase());
+        await avisaEdsiRed(env, "▶️ <b>" + reg.negocio + "</b> ya pagó: lo reactivé.");
+      }
+    } else {
+      renglon.que = "sin cambios (" + estado + ")";
+    }
+    informe.push(renglon);
+  }
+  return { ok: true, informe };
+}
+async function suscripcionesRevisar(env, clave, d) {
+  pideAdmin(env, d);
+  const r = await revisarSuscripciones(env, !!d.solo_ver);
+  return Object.assign({ tipo: "suscripciones_revisar" }, r);
+}
 async function kitComprar(env, clave, d) {
   const origen = String(d && d.__origen || "");
   if (!hayMercadoPago(env)) throw new Error("todav\u00eda no se puede pagar desde aqu\u00ed");
@@ -35961,6 +36046,7 @@ var ESCRITURAS = {
   kit_suscribir: kitSuscribir,
   kit_enganche: kitEnganche,
   kit_mensual: kitMensual,
+  suscripciones_revisar: suscripcionesRevisar,
   recargas_nuevas: recargasNuevas,
   promotor_cobro: promotorCobro,
   red_config: redConfigGuardar,
@@ -36317,7 +36403,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.19";  // version: "2.9.19"
+var VERSION_BETO = "2.9.20";  // version: "2.9.20"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -38964,6 +39050,9 @@ function ligaNegocio(origen, camino, clave, extra) {
 __name(ligaNegocio, "ligaNegocio");
 
 var worker_beto_todo_default = {
+  async scheduled(evento, env, ctx) {
+    ctx.waitUntil(revisarSuscripciones(env, false).catch(() => {}));
+  },
   async fetch(request, env) {
     const url = new URL(request.url);
     const ruta = url.pathname.replace(/\/+$/, "") || "/";
