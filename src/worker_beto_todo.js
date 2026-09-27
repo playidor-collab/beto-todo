@@ -12028,6 +12028,7 @@ var HTML_YO = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f5132">
+<!--MANIFIESTO_YO-->
 <title>Mi pantalla</title>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -12194,6 +12195,8 @@ header .cod{display:inline-block;margin-top:11px;background:rgba(255,255,255,.15
         <h3>1 &middot; Beto — el mesero del QR</h3>
         <p class="que">Negocios de comida: restaurantes, taquerías, botaneros, marisquerías.
            Y también eventos: bodas, XV años, banquetes.</p>
+        <button class="btn" type="button" style="background:#0f7b52" id="bInstala">&#128242; Poner en mi celular — un toque</button>
+        <div class="ay2 oculto" id="instalaAy"></div>
         <a class="btn" style="background:#b3411a" id="bMagia">&#10024; La magia — demo con el menú de aquí</a>
         <a class="btn" style="background:#1d2530" id="bSoporte">&#128735; Mi soporte — pregúntame lo que sea</a>
         <button class="btn" id="bEnsenar" type="button">Enseñar mi QR — pantalla limpia</button>
@@ -12502,6 +12505,25 @@ function pinta(r){
   LIGA_TOCADOS = { p: P, s: S };
   $("bMagia").href = ORG + "/magia?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
   $("bSoporte").href = ORG + "/soporte?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
+  /* PONER EN MI CELULAR. Chrome avisa (beforeinstallprompt) cuando se puede
+     instalar: el boton lo dispara de un toque. Si ya esta instalada o el
+     celular no avisa, se ensenan los pasos a mano. */
+  (function(){
+    var aviso = null, b = $("bInstala"), ay = $("instalaAy");
+    var yaEs = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
+    if (yaEs) { b.classList.add("oculto"); return; }
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(function(){});
+    window.addEventListener("beforeinstallprompt", function(e){ e.preventDefault(); aviso = e; });
+    window.addEventListener("appinstalled", function(){ b.classList.add("oculto"); ay.classList.remove("oculto"); ay.innerHTML = "Listo: ya tienes el icono <b>Mi Beto</b> en tu pantalla. Entra siempre por ahí."; });
+    b.onclick = function(){
+      if (aviso) { aviso.prompt(); aviso = null; return; }
+      var apple = /iPad|iPhone|iPod/.test(navigator.userAgent || "");
+      ay.classList.remove("oculto");
+      ay.innerHTML = apple
+        ? "En iPhone: toca el cuadrito con la flecha de abajo y luego <b>Agregar a inicio</b>."
+        : "Toca los <b>tres puntitos</b> de arriba a la derecha y luego <b>Instalar app</b> o <b>Agregar a la pantalla principal</b>. Si ya la tienes, búscala en tu pantalla como <b>Mi Beto</b>.";
+    };
+  })();
   /* Su herramienta y su instructivo. La primera va firmada: sin eso
      los negocios que mande no quedan a su nombre. */
   $("bMiRonda").href = ORG + "/ronda?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
@@ -36097,7 +36119,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.11";  // version: "2.9.11"
+var VERSION_BETO = "2.9.12";  // version: "2.9.12"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39566,12 +39588,13 @@ await chatAvisar(env, cfg,
          cada promotor abre su propia herramienta, ya firmada. */
       const cod = String(q.get("p") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 14);
       const fir = String(q.get("s") || "").toLowerCase().replace(/[^a-f0-9]/g, "").slice(0, 24);
-      const donde = String(q.get("d") || "") === "mapa" ? "/mapa" : "/ronda";
+      const dQ = String(q.get("d") || "");
+      const donde = dQ === "mapa" ? "/mapa" : dQ === "yo" ? "/yo" : "/ronda";
       const arranque = donde + ((cod && fir)
         ? "?p=" + encodeURIComponent(cod) + "&s=" + encodeURIComponent(fir) : "");
       return new Response(JSON.stringify({
-        name: "Mi ronda · Beto",
-        short_name: "Mi ronda",
+        name: donde === "/yo" ? "Mi herramienta · Beto" : "Mi ronda · Beto",
+        short_name: donde === "/yo" ? "Mi Beto" : "Mi ronda",
         start_url: arranque,
         scope: "/",
         display: "standalone",
@@ -39654,7 +39677,12 @@ await chatAvisar(env, cfg,
       });
     }
     if (ruta === "/yo") {
-      return new Response(HTML_YO, {
+      const pYo = String(q.get("p") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 14);
+      const sYo = String(q.get("s") || "").toLowerCase().replace(/[^a-f0-9]/g, "").slice(0, 24);
+      const cabezaYo = (pYo && sYo)
+        ? '<link rel="manifest" href="/manifest?d=yo&p=' + pYo + "&s=" + sYo + '">\n<link rel="apple-touch-icon" href="/icono?t=192">'
+        : "";
+      return new Response(HTML_YO.split("<!--MANIFIESTO_YO-->").join(cabezaYo), {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
