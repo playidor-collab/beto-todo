@@ -35426,7 +35426,7 @@ async function kitMensual(env, clave, d) {
     method: "POST",
     headers: { "content-type": "application/json", "authorization": "Bearer " + String(env.MP_TOKEN).trim(), "x-idempotency-key": "men-" + reg.id + "-" + Date.now() },
     body: JSON.stringify({
-      reason: "La Carta · Comandero C1 · " + reg.negocio + " · $" + SUSCRIPCION.mensual + " al mes",
+      reason: ("La Carta C1 · $" + SUSCRIPCION.mensual + "/mes · " + reg.negocio).slice(0, 60),
       external_reference: "kits|" + reg.id,
       payer_email: reg.correo,
       back_url: base + "/comprar?pago=suscrito",
@@ -36317,7 +36317,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.18";  // version: "2.9.18"
+var VERSION_BETO = "2.9.19";  // version: "2.9.19"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
