@@ -12195,6 +12195,7 @@ header .cod{display:inline-block;margin-top:11px;background:rgba(255,255,255,.15
         <p class="que">Negocios de comida: restaurantes, taquerías, botaneros, marisquerías.
            Y también eventos: bodas, XV años, banquetes.</p>
         <a class="btn" style="background:#b3411a" id="bMagia">&#10024; La magia — demo con el menú de aquí</a>
+        <a class="btn" style="background:#1d2530" id="bSoporte">&#128735; Mi soporte — pregúntame lo que sea</a>
         <button class="btn" id="bEnsenar" type="button">Enseñar mi QR — pantalla limpia</button>
         <button class="btn wa" id="bWa" type="button">Mandarla por WhatsApp</button>
         <a class="btn gris chico" id="bVerla" target="_blank" rel="noopener">Ver mi invitación como la ve él</a>
@@ -12500,6 +12501,7 @@ function pinta(r){
   $("bVerla").href = liga;
   LIGA_TOCADOS = { p: P, s: S };
   $("bMagia").href = ORG + "/magia?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
+  $("bSoporte").href = ORG + "/soporte?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
   /* Su herramienta y su instructivo. La primera va firmada: sin eso
      los negocios que mande no quedan a su nombre. */
   $("bMiRonda").href = ORG + "/ronda?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
@@ -13087,6 +13089,200 @@ if (P) {
 </html>
 `;
 
+var HTML_SOPORTE = `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi soporte</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#f4f1ec;color:#1d1a17;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  header{background:#1d2530;color:#fff;padding:14px 16px}
+  header h1{margin:0;font-size:19px}
+  header p{margin:3px 0 0;font-size:13px;color:#b9c3cf}
+  .tabs{display:flex;background:#fff;border-bottom:1px solid #e3ddd3;position:sticky;top:0;z-index:2}
+  .tabs button{flex:1;border:0;background:none;padding:13px 6px;font:700 14px system-ui;color:#7b746b;border-bottom:3px solid transparent}
+  .tabs button.on{color:#1d2530;border-color:#d98324}
+  main{max-width:640px;margin:0 auto;padding:14px 14px 120px}
+  .oculto{display:none!important}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin:4px 0 14px}
+  .chips button{border:1px solid #d9d2c6;background:#fff;border-radius:999px;padding:8px 12px;font:600 13px system-ui;color:#3a342d}
+  .msg{border-radius:14px;padding:11px 13px;margin:8px 0;line-height:1.45;font-size:15px;white-space:pre-wrap}
+  .yo{background:#1d2530;color:#fff;margin-left:40px}
+  .el{background:#fff;border:1px solid #e3ddd3;margin-right:24px}
+  .el small{display:block;margin-top:6px;color:#8a8278;font-size:12px}
+  .pend{background:#fff7e8;border:1px solid #f0d19b}
+  .caja{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #e3ddd3;padding:10px 12px}
+  .caja div{max-width:640px;margin:0 auto;display:flex;gap:8px}
+  textarea,input,select{width:100%;border:1px solid #d9d2c6;border-radius:10px;padding:10px;font:15px system-ui;background:#fff}
+  textarea{resize:none;height:48px}
+  .btn{border:0;border-radius:10px;background:#d98324;color:#1b1206;font:800 15px system-ui;padding:0 16px;min-height:48px}
+  .btn.full{width:100%;margin-top:12px}
+  label{display:block;font:700 13px system-ui;margin:12px 0 5px;color:#4a433b}
+  .card{background:#fff;border:1px solid #e3ddd3;border-radius:14px;padding:12px 13px;margin:10px 0;font-size:14px;line-height:1.45}
+  .card b{display:block;font-size:15px}
+  .eti{display:inline-block;font:700 11px system-ui;border-radius:999px;padding:2px 8px;margin-top:4px;background:#eee7dc;color:#5d5549}
+  .ok{background:#e1f3e8;color:#1f6b3d}
+  .aviso{background:#fdecea;border:1px solid #f3b8b1;color:#8a2c20;border-radius:12px;padding:11px;font-size:14px}
+  .mic{background:#1d2530;color:#fff;min-width:52px;font-size:20px;padding:0 12px}
+  .mic2{border:1px solid #1d2530;background:#fff;color:#1d2530;border-radius:999px;padding:6px 12px;font:700 13px system-ui;margin:6px 0 0}
+  .oyendo{background:#c0392b!important;color:#fff!important;border-color:#c0392b!important;animation:late 1.2s infinite}
+  @keyframes late{50%{opacity:.65}}
+  .yoOigo{font:700 13px system-ui;color:#c0392b;margin:0 0 6px;text-align:center}
+</style>
+</head>
+<body>
+<header><h1 id="titulo">Mi soporte</h1><p>Pregúntame lo que sea. Lo que no sé, se lo pregunto a Edsi.</p></header>
+<div class="tabs"><button class="on" data-t="vPreg">Preguntar</button><button data-t="vVisita">Cómo me fue</button><button data-t="vMias">Mis dudas</button></div>
+<main>
+  <div id="err" class="aviso oculto"></div>
+  <section id="vPreg">
+    <div class="chips" id="chips"></div>
+    <div id="chat"></div>
+  </section>
+  <section id="vVisita" class="oculto">
+    <div class="card">Cuéntame cada visita, aunque no hayas vendido. Con esto Edsi mejora el sistema y lo que te toca decir.</div>
+    <label>¿Qué negocio?</label><input id="vNeg" placeholder="Mariscos El Güero">
+    <label>¿Qué te preguntaron?</label><textarea id="vPre" style="height:90px" placeholder="Lo que preguntó el dueño, con sus palabras"></textarea>
+    <button class="mic2" data-mic="vPre" type="button">&#127908; Decirlo hablando</button>
+    <label>¿Qué no le gustó o qué le faltó?</label><textarea id="vObj" style="height:90px" placeholder="Por qué no compró, o qué le pareció caro, difícil o raro"></textarea>
+    <button class="mic2" data-mic="vObj" type="button">&#127908; Decirlo hablando</button>
+    <label>¿Cómo terminó?</label>
+    <select id="vRes"><option>Lo va a pensar</option><option>Compró</option><option>No le interesó</option><option>No estaba el que decide</option><option>Quedé de regresar</option></select>
+    <label>¿Algo más?</label><textarea id="vNota" style="height:80px" placeholder="Opcional"></textarea>
+    <button class="mic2" data-mic="vNota" type="button">&#127908; Decirlo hablando</button>
+    <button class="btn full" id="vMandar">Guardar mi visita</button>
+  </section>
+  <section id="vMias" class="oculto"><div id="mias"></div></section>
+</main>
+<div class="caja" id="cajaPreg"><p class="yoOigo oculto" id="oigo">Te estoy oyendo… habla con calma. Toca &#9209; cuando acabes.</p><div><button class="btn mic" id="bMic" type="button" data-mic="q">&#127908;</button><textarea id="q" placeholder="Escribe o toca el micrófono y habla…"></textarea><button class="btn" id="bPreg">Preguntar</button></div></div>
+<script>
+(function(){
+  var Q = new URLSearchParams(location.search);
+  var P = (Q.get("p") || "").toUpperCase(), S = (Q.get("s") || "");
+  function $(i){ return document.getElementById(i); }
+  function esc(t){ return String(t == null ? "" : t).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function pide(tipo, datos){
+    datos.p = P; datos.s = S;
+    return fetch("/beto-guarda", { method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({ c: "soporte", tipo: tipo, datos: datos }) }).then(function(r){ return r.json(); });
+  }
+  function error(t){ $("err").textContent = t; $("err").classList.remove("oculto"); }
+  if (!P || !S) { error("Esta liga está incompleta. Ábrela desde tu pantalla."); return; }
+
+  var tabs = document.querySelectorAll(".tabs button");
+  for (var i = 0; i < tabs.length; i++) tabs[i].onclick = function(){
+    if (oyendo) parar();
+    for (var j = 0; j < tabs.length; j++) { tabs[j].classList.remove("on"); $(tabs[j].getAttribute("data-t")).classList.add("oculto"); }
+    this.classList.add("on"); $(this.getAttribute("data-t")).classList.remove("oculto");
+    $("cajaPreg").classList.toggle("oculto", this.getAttribute("data-t") !== "vPreg");
+    if (this.getAttribute("data-t") === "vMias") pintaMias();
+  };
+
+  var RAPIDAS = ["¿Cuánto cuesta?", "¿Funciona con iPhone?", "¿Qué trae la caja?", "¿Necesita internet?",
+    "¿Se puede dejar la cuenta abierta varios días?", "¿Se pueden separar cuentas?", "La magia me marca error", "¿Da factura?"];
+  RAPIDAS.forEach(function(t){
+    var b = document.createElement("button"); b.textContent = t;
+    b.onclick = function(){ pregunta(t); }; $("chips").appendChild(b);
+  });
+
+  function burbuja(clase, html){
+    var d = document.createElement("div"); d.className = "msg " + clase; d.innerHTML = html;
+    $("chat").appendChild(d); d.scrollIntoView({ behavior: "smooth", block: "end" }); return d;
+  }
+  function pregunta(t){
+    t = String(t || "").trim(); if (!t) return;
+    burbuja("yo", esc(t)); $("q").value = "";
+    var espera = burbuja("el", "Déjame ver…");
+    pide("soporte_pregunta", { pregunta: t }).then(function(r){
+      if (!r || !r.ok) { espera.innerHTML = esc((r && r.error) || "No se pudo. Intenta otra vez."); return; }
+      if (r.pendiente) {
+        espera.className = "msg el pend";
+        espera.innerHTML = "<b>Eso no lo sé seguro, y no te voy a inventar.</b> Ya se lo mandé a Edsi. Cuando conteste, te aparece en <b>Mis dudas</b>." +
+          "<small>Mientras, con el cliente di: “Eso se lo confirmo con mi jefe ahorita mismo, ¿me da su WhatsApp?”</small>";
+      } else {
+        espera.innerHTML = esc(r.respuesta) + "<small>" + (r.fuente === "edsi" ? "Esto lo contestó Edsi." : "Comprobado en el sistema.") + "</small>";
+      }
+    }).catch(function(){ espera.innerHTML = "Se cortó el internet. Vuelve a preguntar."; });
+  }
+  /* EL MICROFONO. Rolas habla mas facil de lo que escribe. Es el dictado de
+     Chrome: gratis, en espanol, y sin limite: cuando el navegador corta por
+     silencio, vuelve a escuchar solo hasta que Rolas toca Parar. */
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var rec = null, destino = "", boton = null, oyendo = false, base = "";
+  function marca(b, si){
+    if (!b) return;
+    if (!b.getAttribute("data-txt")) b.setAttribute("data-txt", b.innerHTML);
+    b.classList.toggle("oyendo", si);
+    b.innerHTML = si ? "&#9209; Parar" : b.getAttribute("data-txt");
+    if (b.id === "bMic") { b.innerHTML = si ? "&#9209;" : "&#127908;"; $("oigo").classList.toggle("oculto", !si); }
+  }
+  function parar(){ oyendo = false; if (rec) { try { rec.stop(); } catch (e) {} } marca(boton, false); }
+  function escucha(id, b){
+    if (!SR) { alert("Este celular no deja dictar aquí. Usa el micrófono de tu teclado (el dibujito 🎤 del teclado)."); return; }
+    if (oyendo && destino === id) { parar(); return; }
+    if (oyendo) parar();
+    destino = id; boton = b; oyendo = true;
+    base = $(id).value ? $(id).value.replace(/ +$/, "") + " " : "";
+    rec = new SR(); rec.lang = "es-MX"; rec.continuous = true; rec.interimResults = true;
+    rec.onresult = function(e){
+      var dicho = "";
+      for (var i = 0; i < e.results.length; i++) dicho += e.results[i][0].transcript;
+      $(destino).value = base + dicho;
+    };
+    rec.onend = function(){
+      if (!oyendo) { marca(boton, false); return; }
+      base = $(destino).value ? $(destino).value.replace(/ +$/, "") + " " : "";
+      try { rec.start(); } catch (e) { parar(); }
+    };
+    rec.onerror = function(e){
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") { parar(); alert("Dale permiso al micrófono: toca el candadito de arriba y prende Micrófono."); }
+    };
+    marca(b, true);
+    try { rec.start(); } catch (e) { parar(); }
+  }
+  var mics = document.querySelectorAll("[data-mic]");
+  for (var m = 0; m < mics.length; m++) mics[m].onclick = function(){ escucha(this.getAttribute("data-mic"), this); };
+  $("bPreg").onclick = function(){ if (oyendo) parar(); pregunta($("q").value); };
+
+  $("vMandar").onclick = function(){
+    if (oyendo) parar();
+    var b = this, d = { negocio: $("vNeg").value, preguntaron: $("vPre").value, objecion: $("vObj").value, resultado: $("vRes").value, nota: $("vNota").value };
+    if (!String(d.negocio).trim()) { alert("Pon el nombre del negocio."); return; }
+    b.disabled = true; b.textContent = "Guardando…";
+    pide("soporte_visita", d).then(function(r){
+      b.disabled = false; b.textContent = "Guardar mi visita";
+      if (!r || !r.ok) { alert((r && r.error) || "No se guardó. Intenta otra vez."); return; }
+      ["vNeg","vPre","vObj","vNota"].forEach(function(k){ $(k).value = ""; });
+      alert("Guardada. Gracias: con esto se mejora el sistema.");
+    }).catch(function(){ b.disabled = false; b.textContent = "Guardar mi visita"; alert("Se cortó el internet."); });
+  };
+
+  function pintaMias(){
+    $("mias").innerHTML = "<div class='card'>Cargando…</div>";
+    pide("soporte_leer", {}).then(function(r){
+      if (!r || !r.ok) { $("mias").innerHTML = "<div class='aviso'>" + esc((r && r.error) || "No se pudo") + "</div>"; return; }
+      if (r.nombre) $("titulo").textContent = "Soporte de " + r.nombre;
+      var h = "";
+      (r.registros || []).forEach(function(x){
+        if (x.tipo === "visita") {
+          h += "<div class='card'><b>Visita: " + esc(x.negocio) + "</b>" + esc(x.resultado) + (x.objecion ? " · " + esc(x.objecion) : "") +
+               "<br><span class='eti'>" + esc(String(x.fecha).slice(0, 10)) + "</span></div>";
+        } else {
+          h += "<div class='card'><b>" + esc(x.pregunta) + "</b>" + (x.respuesta ? esc(x.respuesta) : "Esperando a Edsi…") +
+               "<br><span class='eti " + (x.respuesta ? "ok" : "") + "'>" + (x.respuesta ? "contestada" : "pendiente") + "</span></div>";
+        }
+      });
+      $("mias").innerHTML = h || "<div class='card'>Todavía no tienes dudas ni visitas guardadas.</div>";
+    }).catch(function(){ $("mias").innerHTML = "<div class='aviso'>Se cortó el internet.</div>"; });
+  }
+  pide("soporte_leer", {}).then(function(r){ if (r && r.ok && r.nombre) $("titulo").textContent = "Soporte de " + r.nombre; else if (r && !r.ok) error(r.error); });
+  burbuja("el", "Hola. Pregúntame lo que te pregunten los clientes, o lo que no te salga. Si no lo sé, se lo pregunto a Edsi y te aviso.");
+})();
+</script>
+</body>
+</html>`;
 var HTML_MAGIA = `<!doctype html>
 <html lang="es">
 <head>
@@ -32612,6 +32808,10 @@ async function telegramRedEntrante(env, cuerpo, origen) {
   const chatId = msg.chat && msg.chat.id;
   const texto = String(msg.text || "").trim();
   if (!chatId) return { ok: true, nada: true };
+  if (msg.reply_to_message) {
+    const hecho = await soporteRespuestaEdsi(env, msg);
+    if (hecho) return hecho;
+  }
   const arranque = texto.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Z0-9]{2,14})-([0-9a-f]{12})\s*$/i);
   if (arranque) {
     return await enlazarPromotorRed(env, chatId, String(arranque[1]).toUpperCase(), arranque[2]);
@@ -35219,6 +35419,186 @@ async function negocioUsa(env, clave, d) {
 }
 __name(negocioUsa, "negocioUsa");
 
+
+/* EL SOPORTE DEL VENDEDOR. Lo que sabe esta aqui, comprobado contra el
+   sistema. Lo que no esta aqui NO se contesta: se le pregunta a Edsi. */
+/* Cada entrada: sus palabras ("!" = palabra fuerte, vale 2; frase de dos
+   palabras vale 2; palabra suelta vale 1) y su respuesta. Se busca por
+   PALABRA COMPLETA y hace falta sumar 2: "vales de despensa" NO es "cuanto
+   vale". Si no llega a 2, no se contesta: se le pregunta a Edsi. */
+var SOPORTE_BASE = [
+  { c: ["!cuesta", "!precio", "cuanto", "cobran"], r: "La caja cuesta $3,700 de contado, o $4,100 a 3 meses sin intereses con tarjeta. Se paga UNA sola vez: no hay mensualidad. No des descuentos ni cambies el precio." },
+  { c: ["!mensualidad", "!mensual", "cada mes", "renta"], r: "No hay mensualidad. La caja se paga una sola vez y es del negocio. Lo único que se recarga es Beto: trae 300 pláticas incluidas y la recarga son 300 más por $100. Si no recarga, todo lo demás sigue funcionando igual." },
+  { c: ["!msi", "sin intereses", "a meses", "!plazos", "6 meses", "12 meses"], r: "Solo hay 3 meses sin intereses con tarjeta ($4,100). NO ofrezcas 6 ni 12 meses: no están disponibles." },
+  { c: ["!iphone", "!apple", "!android"], r: "Para la cocina y la impresora hace falta un teléfono o tableta Android con Chrome: con iPhone la impresora no se conecta. Los clientes que piden desde la mesa sí pueden usar cualquier celular, iPhone o Android, porque solo abren una página." },
+  { c: ["trae", "incluye", "viene", "caja", "que trae"], r: "La caja trae la impresora térmica Bluetooth, las tarjetas con los códigos QR para las mesas, papel y el instructivo." },
+  { c: ["!internet", "!wifi", "datos", "senal"], r: "Sí necesita internet: el WiFi del negocio o los datos del celular." },
+  { c: ["!garantia", "se descompone", "se rompe", "se echa a perder"], r: "Tiene 3 meses de garantía. El teléfono para la garantía viene en la póliza de la caja." },
+  { c: ["!dificil", "!instalar", "!configurar", "cuanto tarda"], r: "Se pone en unos 10 minutos. La pantalla lo va llevando paso a paso." },
+  { c: ["no sabe usar", "no usa celular", "!viejitos", "llamar al mesero", "!mesero"], r: "El cliente que no quiere usar el celular le pide al mesero como siempre. Nadie está obligado. Y desde la mesa también puede tocar 'Que venga el mesero' y al mesero le llega el aviso." },
+  { c: ["!beto", "!domicilio", "!platicas", "desde su casa"], r: "Beto es el que contesta por chat a los que piden DESDE SU CASA. No aparece en la mesa: en la mesa el cliente toca su menú y ya. Trae 300 pláticas incluidas; la recarga son 300 más por $100." },
+  { c: ["!factura", "!facturas", "!cfdi", "!fiscal"], r: "No. El sistema no hace facturas ni CFDI. Los tickets son informativos, no fiscales." },
+  { c: ["varios dias", "!hotel", "!huesped", "!huespedes", "se quedan", "cuenta abierta", "otro dia"], r: "Hoy NO: la cuenta abierta dura el día. La caja junta lo que la mesa pidió hoy; si el cliente regresa otro día, lo de ayer ya no aparece en la caja. Edsi ya está trabajando en la cuenta que se queda abierta varios días. No lo prometas todavía." },
+  { c: ["!separar", "!separadas", "!dividir", "cada quien"], r: "Todavía no desde la pantalla: la caja cobra la mesa completa. Separar cuentas está en construcción. No lo prometas todavía." },
+  { c: ["cuantas mesas", "!150", "numero de mesa"], r: "Aguanta hasta 150 mesas. Cada mesa tiene su QR y la comanda sale con su número de mesa." },
+  { c: ["!impresora", "!imprime", "!comanda", "ticket", "papel"], r: "La comanda sale impresa sola en la cocina, con el número de mesa, por Bluetooth, desde un teléfono Android con Chrome. En la pantalla de Cocina se toca 'Conectar impresora' una vez." },
+  { c: ["cambiar precios", "cambiar el menu", "subir el menu", "cambia precios", "foto del menu"], r: "El dueño cambia sus precios y su menú desde su celular. El cliente siempre ve los precios de hoy. También se le puede tomar foto al menú y el sistema lo escribe solo." },
+  { c: ["se acabo", "se acaba", "!agotado", "ya no hay"], r: "Si algo se acaba, el dueño lo marca y el cliente lo ve en gris y no lo puede pedir." },
+  { c: ["!corte", "!propina", "cuanto vendi", "como cobra"], r: "El dueño cobra desde su celular con su NIP, puede anotar la propina, y el corte del día sale solo." },
+  { c: ["!error", "!429", "no pude leer", "no lee", "marca error"], r: "Si La magia dice 'no pude leer la foto (error 429)', el problema no es tuyo: es la cuenta que lee las fotos. Avísale a Edsi de inmediato. Si dice otro error, toma la foto otra vez, más de cerca y con luz." },
+  { c: ["!magia", "!demostracion", "como la enseno"], r: "La magia: en tu pantalla toca 'La magia'. Pon el número de mesa y el nombre del lugar y tómale foto al menú. Luego toca 'Ver la cocina' y ahí 'Conectar impresora'. Regresa, toca 'Abrir la mesa' y deja que el dueño pida algo. Cámbiate a la cocina: el ticket sale solo. Ignora el botón de '7 días gratis'." },
+  { c: ["que le digo", "no se que decir", "no supe"], r: "Tu regla de oro: si te preguntan algo que no sabes, no inventes. Di: 'Eso se lo confirmo con mi jefe ahorita mismo, ¿me da su WhatsApp?'" }
+];
+/* Palabra completa: "vale" no pega con "vales"; si pega con su plural simple. */
+function soporteTiene(q, palabra) {
+  const w = soporteLimpio(palabra);
+  return q.indexOf(" " + w + " ") > -1 || q.indexOf(" " + w + "s ") > -1 || q.indexOf(" " + w + "es ") > -1;
+}
+function soporteLimpio(t) {
+  return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+async function soporteQuien(env, d) {
+  const code = String(d.p || "").toUpperCase();
+  const sello = String(d.s || "").toLowerCase();
+  if (!code || !sello) throw new Error("esta liga está incompleta; ábrela desde tu pantalla");
+  if (sello !== await selloPromotor(env, code)) throw new Error("esa liga ya no sirve; abre tu pantalla otra vez");
+  const filas = await traerCon(env, TABLA_CLIENTES, [{ columnName: "promotor", condition: "eq", value: code }]);
+  const yo = filas.map(limpiaCliente).find(esFilaPromotor);
+  if (!yo) throw new Error("no encontré ese promotor");
+  return { code, nombre: String(yo.negocio || code), tg: pedazoDe(yo.notas, "TG:") };
+}
+async function soporteTodos(env, code) {
+  const out = [];
+  let cursor;
+  for (let v = 0; v < 5; v++) {
+    const l = await env.FOTOS.list({ prefix: "soporte/", limit: 500, cursor });
+    for (const o of (l.objects || [])) {
+      if (code && o.key.indexOf("soporte/" + code + "-") !== 0) continue;
+      const g = await env.FOTOS.get(o.key);
+      if (g) { try { out.push(JSON.parse(await g.text())); } catch (e) {} }
+    }
+    if (!l.truncated) break;
+    cursor = l.cursor;
+  }
+  out.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+  return out;
+}
+async function soporteGuarda(env, reg) {
+  await env.FOTOS.put("soporte/" + reg.code + "-" + reg.id + ".json", JSON.stringify(reg), { httpMetadata: { contentType: "application/json" } });
+}
+/* Lo que Edsi ya contesto tambien cuenta como sabido. */
+async function soporteSabido(env) {
+  const todos = await soporteTodos(env, "");
+  return todos.filter((x) => x.tipo === "pregunta" && x.respuesta && x.fuente_resp === "edsi")
+    .map((x) => ({ q: x.pregunta, r: x.respuesta }));
+}
+function soporteBusca(pregunta, sabido) {
+  const q = " " + soporteLimpio(pregunta) + " ";
+  // Primero lo que ya contesto Edsi: si se parece mucho, eso manda.
+  const pal = q.split(" ").filter((w) => w.length > 3);
+  let mejorE = null, puntosE = 0;
+  for (const x of sabido) {
+    const suyas = soporteLimpio(x.q).split(" ").filter((w) => w.length > 3);
+    if (!suyas.length) continue;
+    const comunes = suyas.filter((w) => pal.indexOf(w) > -1).length;
+    const p = comunes / Math.max(suyas.length, pal.length);
+    if (p > puntosE) { puntosE = p; mejorE = x; }
+  }
+  if (mejorE && puntosE >= 0.6) return { r: mejorE.r, fuente: "edsi" };
+  let mejor = null, puntos = 0;
+  for (const b of SOPORTE_BASE) {
+    let p = 0;
+    for (const c of b.c) {
+      const fuerte = c.charAt(0) === "!", w = fuerte ? c.slice(1) : c;
+      if (soporteTiene(q, w)) p += (fuerte || w.indexOf(" ") > -1) ? 2 : 1;
+    }
+    if (p > puntos) { puntos = p; mejor = b; }
+  }
+  return mejor && puntos >= 2 ? { r: mejor.r, fuente: "base", puntos } : null;
+}
+/* El cerebro platica, pero solo con lo que esta escrito arriba. Si la duda
+   no viene ahi, contesta NO_SE y la pregunta se va a Edsi. Si el cerebro no
+   esta (sin saldo, sin llave), se usa la busqueda por palabras. */
+async function soporteCerebro(env, pregunta, sabido) {
+  if (!env.OPENAI_KEY) return null;
+  const hechos = SOPORTE_BASE.map((b) => "- " + b.r).concat(sabido.map((x) => "- (Edsi) " + x.q + " -> " + x.r)).join("\n");
+  const res = await llamarOjo(env, {
+    model: MODELO_OJO,
+    messages: [
+      { role: "system", content: "Eres el soporte de un vendedor de La Carta (Comandero C1). Contesta en español sencillo, corto, de tú, SOLO con estos hechos. Si la respuesta no está en los hechos, contesta exactamente NO_SE. Nunca inventes precios, plazos, funciones ni fechas.\n\nHECHOS:\n" + hechos },
+      { role: "user", content: String(pregunta) }
+    ],
+    max_completion_tokens: 350
+  });
+  if (!res.ok) return null;
+  let j = null;
+  try { j = JSON.parse(res.texto); } catch (e) {}
+  const dicho = String(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || "").trim();
+  if (!dicho) return null;
+  if (/NO_SE/.test(dicho)) return { no_se: true };
+  return { r: dicho, fuente: "base" };
+}
+async function soportePregunta(env, clave, d) {
+  const yo = await soporteQuien(env, d);
+  const pregunta = String(d.pregunta || "").replace(/\s+/g, " ").trim().slice(0, 500);
+  if (pregunta.length < 3) throw new Error("escribe tu pregunta");
+  const sabido = await soporteSabido(env);
+  let dicho = null;
+  try { dicho = await soporteCerebro(env, pregunta, sabido); } catch (e) { dicho = null; }
+  if (!dicho) {
+    const b = soporteBusca(pregunta, sabido);
+    if (b) dicho = b;
+  }
+  const reg = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), code: yo.code, quien: yo.nombre,
+    tipo: "pregunta", fecha: isoMX(), pregunta };
+  if (dicho && !dicho.no_se) {
+    reg.respuesta = dicho.r; reg.fuente_resp = dicho.fuente;
+    await soporteGuarda(env, reg);
+    return { ok: true, tipo: "soporte_pregunta", respuesta: dicho.r, fuente: dicho.fuente };
+  }
+  await soporteGuarda(env, reg);
+  await avisaEdsiRed(env, "❓ <b>Pregunta de " + yo.nombre + "</b> (" + yo.code + ") #S" + reg.id + "\n\n" + pregunta +
+    "\n\n<i>Contéstale RESPONDIENDO a este mensaje. Tu respuesta le llega y queda aprendida.</i>");
+  return { ok: true, tipo: "soporte_pregunta", pendiente: reg.id };
+}
+async function soporteVisita(env, clave, d) {
+  const yo = await soporteQuien(env, d);
+  const corta = (t, n) => String(t || "").replace(/\s+/g, " ").trim().slice(0, n);
+  const reg = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), code: yo.code, quien: yo.nombre,
+    tipo: "visita", fecha: isoMX(), negocio: corta(d.negocio, 80), preguntaron: corta(d.preguntaron, 600),
+    objecion: corta(d.objecion, 600), resultado: corta(d.resultado, 40), nota: corta(d.nota, 600) };
+  if (!reg.negocio) throw new Error("pon el nombre del negocio");
+  await soporteGuarda(env, reg);
+  await avisaEdsiRed(env, "\u{1F4DD} <b>Visita de " + yo.nombre + "</b>: " + reg.negocio + " — " + reg.resultado +
+    (reg.preguntaron ? "\nPreguntaron: " + reg.preguntaron : "") + (reg.objecion ? "\nNo le gustó: " + reg.objecion : "") +
+    (reg.nota ? "\nNota: " + reg.nota : ""));
+  return { ok: true, tipo: "soporte_visita", id: reg.id };
+}
+async function soporteLeer(env, clave, d) {
+  const yo = await soporteQuien(env, d);
+  const regs = (await soporteTodos(env, yo.code)).slice(0, 40);
+  return { ok: true, tipo: "soporte_leer", nombre: yo.nombre, registros: regs };
+}
+/* Edsi contesta RESPONDIENDO el mensaje del bot. Aqui se guarda. */
+async function soporteRespuestaEdsi(env, msg) {
+  const chatId = String(msg.chat && msg.chat.id || "");
+  if (!chatId || chatId !== String(env.TG_EDSI || "").trim()) return null;
+  const citado = String(msg.reply_to_message && (msg.reply_to_message.text || msg.reply_to_message.caption) || "");
+  const m = citado.match(/#S([a-z0-9]+)/);
+  const texto = String(msg.text || "").trim();
+  if (!m || !texto) return null;
+  const todos = await soporteTodos(env, "");
+  const reg = todos.find((x) => x.id === m[1]);
+  if (!reg) { await tgRedEnviar(env, chatId, "No encontré esa pregunta."); return { ok: true }; }
+  reg.respuesta = texto; reg.fuente_resp = "edsi"; reg.contestada = isoMX();
+  await soporteGuarda(env, reg);
+  const yo = await traerCon(env, TABLA_CLIENTES, [{ columnName: "promotor", condition: "eq", value: reg.code }]);
+  const f = yo.map(limpiaCliente).find(esFilaPromotor);
+  const suTg = f ? pedazoDe(f.notas, "TG:") : "";
+  if (suTg) await tgRedEnviar(env, suTg, "✅ Edsi contestó tu duda:\n<b>" + reg.pregunta + "</b>\n\n" + texto);
+  await tgRedEnviar(env, chatId, "✅ Guardado. Ya le llegó" + (suTg ? " a su Telegram" : " a su pantalla (Mis dudas)") + ", y la próxima vez el soporte ya lo sabe.");
+  return { ok: true, soporte: true };
+}
 var ESCRITURAS = {
   /* El llavero: darle o quitarle la entrada a la cocina a una persona. */
   llaves: guardarLlaves,
@@ -35268,6 +35648,9 @@ var ESCRITURAS = {
   prueba_menu_foto: leerMenuPrueba,
   promotor_alta: promotorAlta,
   magia: hacerMagia,
+  soporte_pregunta: soportePregunta,
+  soporte_visita: soporteVisita,
+  soporte_leer: soporteLeer,
   pago_anual: pagoAnual,
   cobro_recordar: cobroRecordar,
   cupon_familia: cuponFamilia,
@@ -35634,7 +36017,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.7";  // version: "2.9.7"
+var VERSION_BETO = "2.9.8";  // version: "2.9.8"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39210,6 +39593,12 @@ await chatAvisar(env, cfg,
     }
     if (ruta === "/evento") {
       return new Response(HTML_EVENTO, {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+      });
+    }
+    if (ruta === "/soporte") {
+      return new Response(HTML_SOPORTE, {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
