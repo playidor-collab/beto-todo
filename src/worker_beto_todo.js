@@ -13205,7 +13205,10 @@ var HTML_SOPORTE = `<!doctype html>
         var bs = espera.querySelector("[data-sim]");
         bs.onclick = function(){ simula(this.getAttribute("data-sim"), this); };
       } else {
-        espera.innerHTML = esc(r.respuesta) + "<small>" + (r.fuente === "edsi" ? "Esto lo contestó Edsi." : "Comprobado en el sistema.") + "</small>";
+        espera.innerHTML = esc(r.respuesta) + "<small>" + (r.fuente === "edsi" ? "Esto lo contestó Edsi." : "Comprobado en el sistema.") + "</small>" +
+          (r.simulable ? "<button class='mic2' style='margin-top:10px' data-sim='" + esc(r.id) + "'>✨ Enseñarle cómo se vería</button>" : "");
+        var bs2 = espera.querySelector("[data-sim]");
+        if (bs2) bs2.onclick = function(){ simula(this.getAttribute("data-sim"), this); };
       }
     }).catch(function(){ espera.innerHTML = "Se cortó el internet. Vuelve a preguntar."; });
   }
@@ -35569,7 +35572,8 @@ async function soportePregunta(env, clave, d) {
   if (dicho && !dicho.no_se) {
     reg.respuesta = dicho.r; reg.fuente_resp = dicho.fuente;
     await soporteGuarda(env, reg);
-    return { ok: true, tipo: "soporte_pregunta", respuesta: dicho.r, fuente: dicho.fuente };
+    const noExiste = /todav[ií]a no|hoy no|no lo prometas|no existe|en construcci/i.test(dicho.r);
+    return { ok: true, tipo: "soporte_pregunta", respuesta: dicho.r, fuente: dicho.fuente, id: reg.id, simulable: noExiste };
   }
   await soporteGuarda(env, reg);
   await avisaEdsiRed(env, "❓ <b>Pregunta de " + yo.nombre + "</b> (" + yo.code + ") #S" + reg.id + "\n\n" + pregunta +
@@ -36093,7 +36097,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.10";  // version: "2.9.10"
+var VERSION_BETO = "2.9.11";  // version: "2.9.11"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
