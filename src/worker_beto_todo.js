@@ -36509,7 +36509,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.23";  // version: "2.9.23"
+var VERSION_BETO = "2.9.24";  // version: "2.9.24"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -40316,6 +40316,16 @@ await chatAvisar(env, cfg,
           version: VERSION_BETO,
           llave: "presente",
           n8n_status: r.status,
+          bot_red: await (async () => {
+            const token = String(env.TG_RED || "").trim();
+            if (!token) return { hay: false };
+            try {
+              const w = await (await fetch(TELEGRAM + token + "/getWebhookInfo")).json();
+              const x = (w && w.result) || {};
+              return { hay: true, apunta_a: String(x.url || "(nada)"), atorados: x.pending_update_count || 0,
+                ultimo_error: String(x.last_error_message || ""), error_hace_min: x.last_error_date ? Math.round((Date.now() / 1e3 - x.last_error_date) / 60) : null };
+            } catch (e) { return { hay: true, error: "no pude preguntarle a Telegram" }; }
+          })(),
           hora_mexico: fechaHoraMX(),
           rutas: [
             "/mesa",
