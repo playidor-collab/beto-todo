@@ -11094,7 +11094,7 @@ var HTML_PONERME = `<!DOCTYPE html>
       .catch(function(){});
     $("colaRonda").parentNode.removeChild($("colaRonda"));
   } else {
-    $("bAbrir").href = "/ronda" + firma;
+    $("bAbrir").href = "/yo" + firma;
     $("bRevisar").href = "/revisar" + firma;
   }
 
@@ -12135,6 +12135,22 @@ header .cod{display:inline-block;margin-top:11px;background:rgba(255,255,255,.15
     <div class="cuerpo">
 
       <div id="tgArriba"></div>
+      <!-- PARA VENDER: lo que usa parado frente al dueno, hasta arriba. -->
+      <div class="proy oculto" id="enApp" style="border-left-color:#c0392b;background:#fdecea;margin-bottom:14px">
+        <h3 style="color:#8a2c20">&#9888;&#65039; Estás dentro de Telegram</h3>
+        <p class="que" style="color:#8a2c20">Aquí <b>no se conecta la impresora</b> ni se instala tu icono. Ábrela en <b>Chrome</b>:</p>
+        <button class="btn" type="button" style="background:#c0392b" id="bAChrome">Abrir en Chrome</button>
+        <div class="ay2" style="color:#8a2c20">Si no se abre: toca los <b>tres puntitos</b> de arriba a la derecha y luego <b>Abrir en Chrome</b> o <b>Abrir en el navegador</b>.</div>
+      </div>
+      <div class="proy" style="border-left-color:#b3411a;margin-bottom:14px">
+        <h3>Para vender</h3>
+        <p class="que">Todo lo que usas frente al dueño.</p>
+        <button class="btn" type="button" style="background:#0f7b52" id="bInstala">&#128242; Poner en mi celular — un toque</button>
+        <div class="ay2 oculto" id="instalaAy"></div>
+        <a class="btn" style="background:#b3411a" id="bMagia">&#10024; La magia — demo con el menú de aquí</a>
+        <a class="btn" style="background:#1d2530" id="bSoporte">&#128735; Mi soporte — pregúntame lo que sea</a>
+      </div>
+
 
       <div class="caja">
         <h3>Mi dinero</h3>
@@ -12173,11 +12189,11 @@ header .cod{display:inline-block;margin-top:11px;background:rgba(255,255,255,.15
 
       <!-- Lo primero, porque es lo que usa parado frente al dueno. -->
       <div class="proy" style="border-left-color:#8a5b00;margin-bottom:14px">
-        <h3>Mi herramienta</h3>
-        <p class="que">Con ésta trabajas. Ábrela cuando ya estés adentro del
-           negocio y déjate llevar: te va diciendo qué hacer y qué decir.</p>
-        <a class="btn" style="background:#0f7b52" id="bMiRonda" target="_blank" rel="noopener">
-          &#128241; Abrir mi herramienta</a>
+        <h3>Practicar la plática</h3>
+        <p class="que">El guion de qué decirle al dueño, paso a paso. Úsalo para
+           practicar; para la demostración usa La magia.</p>
+        <a class="btn gris chico" id="bMiRonda" target="_blank" rel="noopener">
+          &#128172; Guion para platicar con el dueño</a>
         <a class="btn gris chico" id="bMiHago" target="_blank" rel="noopener">
           Lo que hago yo — léelo una vez</a>
         <a class="btn gris chico" id="bMiMapa" target="_blank" rel="noopener">
@@ -12195,10 +12211,6 @@ header .cod{display:inline-block;margin-top:11px;background:rgba(255,255,255,.15
         <h3>1 &middot; Beto — el mesero del QR</h3>
         <p class="que">Negocios de comida: restaurantes, taquerías, botaneros, marisquerías.
            Y también eventos: bodas, XV años, banquetes.</p>
-        <button class="btn" type="button" style="background:#0f7b52" id="bInstala">&#128242; Poner en mi celular — un toque</button>
-        <div class="ay2 oculto" id="instalaAy"></div>
-        <a class="btn" style="background:#b3411a" id="bMagia">&#10024; La magia — demo con el menú de aquí</a>
-        <a class="btn" style="background:#1d2530" id="bSoporte">&#128735; Mi soporte — pregúntame lo que sea</a>
         <button class="btn" id="bEnsenar" type="button">Enseñar mi QR — pantalla limpia</button>
         <button class="btn wa" id="bWa" type="button">Mandarla por WhatsApp</button>
         <a class="btn gris chico" id="bVerla" target="_blank" rel="noopener">Ver mi invitación como la ve él</a>
@@ -12505,6 +12517,18 @@ function pinta(r){
   LIGA_TOCADOS = { p: P, s: S };
   $("bMagia").href = ORG + "/magia?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
   $("bSoporte").href = ORG + "/soporte?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
+  /* DENTRO DE TELEGRAM (u otra app): el navegador de adentro no tiene
+     Bluetooth web ni instala iconos. Se avisa y se ofrece abrir Chrome. */
+  (function(){
+    var ua = navigator.userAgent || "";
+    var android = ua.indexOf("Android") > -1;
+    var dentro = android && (ua.indexOf("; wv)") > -1 || ua.indexOf("Telegram") > -1 || !("bluetooth" in navigator));
+    if (!dentro) return;
+    $("enApp").classList.remove("oculto");
+    $("bAChrome").onclick = function(){
+      location.href = "intent://" + location.host + location.pathname + location.search + "#Intent;scheme=https;package=com.android.chrome;end";
+    };
+  })();
   /* PONER EN MI CELULAR. Chrome avisa (beforeinstallprompt) cuando se puede
      instalar: el boton lo dispara de un toque. Si ya esta instalada o el
      celular no avisa, se ensenan los pasos a mano. */
@@ -36403,7 +36427,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.20";  // version: "2.9.20"
+var VERSION_BETO = "2.9.21";  // version: "2.9.21"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39948,7 +39972,7 @@ await chatAvisar(env, cfg,
       const cod = String(q.get("p") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 14);
       const fir = String(q.get("s") || "").toLowerCase().replace(/[^a-f0-9]/g, "").slice(0, 24);
       const dQ = String(q.get("d") || "");
-      const donde = dQ === "mapa" ? "/mapa" : dQ === "yo" ? "/yo" : "/ronda";
+      const donde = dQ === "mapa" ? "/mapa" : dQ === "ronda" ? "/ronda" : "/yo";
       const arranque = donde + ((cod && fir)
         ? "?p=" + encodeURIComponent(cod) + "&s=" + encodeURIComponent(fir) : "");
       return new Response(JSON.stringify({
