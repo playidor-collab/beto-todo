@@ -35369,6 +35369,79 @@ __name(plazoDe, "plazoDe");
 /* COMPRAR UNA CAJA. La pide un desconocido desde la calle: no lleva NIP ni
    llave, solo el plazo. Lo unico que hace es devolver la liga de Mercado
    Pago; no prende nada ni toca ningun negocio. */
+var SUSCRIPCION = { enganche: 1300, mensual: 400 };
+/* Paso 1: se guardan los datos y se avisa a Edsi. Devuelve el ID. */
+async function kitSuscribir(env, clave, d) {
+  const corta = (t, n) => String(t || "").replace(/\s+/g, " ").trim().slice(0, n);
+  const reg = {
+    negocio: corta(d.negocio, 60), dueno: corta(d.dueno, 60),
+    telefono: corta(d.telefono, 20), correo: corta(d.correo, 80).toLowerCase(),
+    vendedor: corta(d.vendedor, 20).toUpperCase(), fecha: isoMX(), estado: "datos"
+  };
+  if (reg.negocio.length < 2) throw new Error("falta el nombre del negocio");
+  if (reg.dueno.length < 2) throw new Error("falta tu nombre");
+  if (soloNumeros(reg.telefono).length < 10) throw new Error("falta tu teléfono, con los 10 números");
+  if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(reg.correo)) throw new Error("revisa tu correo: ahí te llega el recibo de cada mes");
+  reg.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  await env.FOTOS.put("suscripciones/" + reg.id + ".json", JSON.stringify(reg), { httpMetadata: { contentType: "application/json" } });
+  await avisaEdsiRed(env, "\u{1F195} <b>Suscripción en proceso</b>\n" + reg.negocio + " — " + reg.dueno + "\nTel: " + reg.telefono +
+    (reg.vendedor ? "\nVendedor: " + reg.vendedor : "") + "\nEnganche $" + SUSCRIPCION.enganche + " + $" + SUSCRIPCION.mensual + " al mes.");
+  return { ok: true, tipo: "kit_suscribir", id: reg.id };
+}
+async function leeSuscripcion(env, id) {
+  const limpio = String(id || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  const obj = limpio ? await env.FOTOS.get("suscripciones/" + limpio + ".json") : null;
+  if (!obj) throw new Error("no encontré esa suscripción; empieza otra vez");
+  return JSON.parse(await obj.text());
+}
+/* Paso 2: el enganche por Mercado Pago (tarjeta u OXXO). */
+async function kitEnganche(env, clave, d) {
+  if (!hayMercadoPago(env)) throw new Error("todavía no se puede pagar desde aquí");
+  const reg = await leeSuscripcion(env, d.id);
+  const base = origenPublico("", String(d && d.__origen || ""));
+  const r = await fetch(MP_API + "/checkout/preferences", {
+    method: "POST",
+    headers: { "content-type": "application/json", "authorization": "Bearer " + String(env.MP_TOKEN).trim(), "x-idempotency-key": "eng-" + reg.id + "-" + Date.now() },
+    body: JSON.stringify({
+      items: [{ id: "kit-c1-enganche", title: "La Carta · Comandero C1 · Enganche de suscripción", description: "Enganche de la suscripción: impresora, rollos, códigos y 300 pláticas con Beto.", quantity: 1, unit_price: SUSCRIPCION.enganche, currency_id: "MXN" }],
+      /* "kite" no es ningun negocio ni tanque: el aviso de recargas lo descarta. */
+      external_reference: "kite|" + reg.id,
+      payer: { email: reg.correo },
+      back_urls: { success: base + "/comprar?paso=mensual&r=" + reg.id, pending: base + "/comprar?paso=mensual&r=" + reg.id + "&eng=pendiente", failure: base + "/comprar?pago=no" },
+      auto_return: "approved",
+      statement_descriptor: "LA CARTA"
+    })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.init_point) throw new Error("Mercado Pago no aceptó la orden (" + r.status + ")");
+  return { ok: true, tipo: "kit_enganche", liga: String(j.init_point) };
+}
+/* Paso 3: los $400 al mes, suscripcion de Mercado Pago. Empieza en un mes. */
+async function kitMensual(env, clave, d) {
+  if (!hayMercadoPago(env)) throw new Error("todavía no se puede pagar desde aquí");
+  const reg = await leeSuscripcion(env, d.id);
+  const base = origenPublico("", String(d && d.__origen || ""));
+  const inicio = new Date(Date.now() + 30 * 864e5).toISOString();
+  const r = await fetch(MP_API + "/preapproval", {
+    method: "POST",
+    headers: { "content-type": "application/json", "authorization": "Bearer " + String(env.MP_TOKEN).trim(), "x-idempotency-key": "men-" + reg.id + "-" + Date.now() },
+    body: JSON.stringify({
+      reason: "La Carta · Comandero C1 · " + reg.negocio + " · $" + SUSCRIPCION.mensual + " al mes",
+      external_reference: "kits|" + reg.id,
+      payer_email: reg.correo,
+      back_url: base + "/comprar?pago=suscrito",
+      auto_recurring: { frequency: 1, frequency_type: "months", start_date: inicio, transaction_amount: SUSCRIPCION.mensual, currency_id: "MXN" },
+      status: "pending"
+    })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.init_point) throw new Error("Mercado Pago no aceptó la suscripción (" + r.status + (j && j.message ? ": " + String(j.message).slice(0, 120) : "") + ")");
+  reg.estado = "mensual_abierto"; reg.preapproval = String(j.id || ""); reg.enganche = String(d.efectivo ? "efectivo" : "mercadopago");
+  await env.FOTOS.put("suscripciones/" + reg.id + ".json", JSON.stringify(reg), { httpMetadata: { contentType: "application/json" } });
+  await avisaEdsiRed(env, "\u{1F4B3} <b>" + reg.negocio + "</b> ya va a activar su pago de $" + SUSCRIPCION.mensual + " al mes." +
+    (d.efectivo ? "\n⚠️ Dijo que el ENGANCHE lo pagó EN EFECTIVO con el vendedor " + (reg.vendedor || "") + ". Confírmalo." : ""));
+  return { ok: true, tipo: "kit_mensual", liga: String(j.init_point) };
+}
 async function kitComprar(env, clave, d) {
   const origen = String(d && d.__origen || "");
   if (!hayMercadoPago(env)) throw new Error("todav\u00eda no se puede pagar desde aqu\u00ed");
@@ -35587,11 +35660,11 @@ __name(negocioUsa, "negocioUsa");
    PALABRA COMPLETA y hace falta sumar 2: "vales de despensa" NO es "cuanto
    vale". Si no llega a 2, no se contesta: se le pregunta a Edsi. */
 var SOPORTE_BASE = [
-  { c: ["!cuesta", "!precio", "cuanto", "cobran"], r: "Hay dos formas. 1) Pago anual: $3,700 por UN AÑO de servicio, de contado, o $4,100 a 3 meses sin intereses con tarjeta. Cada año se renueva por $3,700. 2) Suscripción: $1,300 de enganche y $400 al mes. En las dos: si deja de pagar o no renueva, se queda con la impresora y el servicio se corta. No des descuentos ni cambies los precios." },
-  { c: ["!mensualidad", "!mensual", "cada mes", "renta"], r: "Sí hay opción mensual: la suscripción. $1,300 de enganche y $400 al mes, mientras use el servicio. No es crédito: si deja de pagar, se queda con la impresora y el servicio se corta. La otra opción es el pago anual: $3,700 por un año (o $4,100 a 3 meses sin intereses), y se renueva cada año por $3,700. Beto trae 300 pláticas incluidas; la recarga son 300 más por $100." },
+  { c: ["!cuesta", "!precio", "cuanto", "cobran"], r: "Hay dos formas. 1) Pago anual: $3,700 por UN AÑO de servicio, de contado, o $4,150 a 3 meses sin intereses con tarjeta. Cada año se renueva por $3,700. 2) Suscripción: $1,300 de enganche y $400 al mes. En las dos: si deja de pagar o no renueva, se queda con la impresora y el servicio se corta. No des descuentos ni cambies los precios." },
+  { c: ["!mensualidad", "!mensual", "cada mes", "renta"], r: "Sí hay opción mensual: la suscripción. $1,300 de enganche y $400 al mes, mientras use el servicio. No es crédito: si deja de pagar, se queda con la impresora y el servicio se corta. La otra opción es el pago anual: $3,700 por un año (o $4,150 a 3 meses sin intereses), y se renueva cada año por $3,700. Beto trae 300 pláticas incluidas; la recarga son 300 más por $100." },
   { c: ["no tiene dinero", "no le alcanza", "!enganche", "!suscripcion", "en pagos", "pagar poco a poco", "!abonos"], r: "Ofrécele la suscripción: $1,300 de enganche y $400 al mes. No es crédito, es como una suscripción: mientras pague, funciona; si deja de pagar, se queda con la impresora y el servicio se corta. Si puede pagar el año completo, le conviene más el pago anual: $3,700 por un año." },
   { c: ["para siempre", "!renovar", "!renueva", "!anual", "cada ano", "un ano", "despues del ano", "es suya", "es mia"], r: "Los $3,700 son por UN AÑO de servicio. Al cumplir el año se renueva por otros $3,700. Si no renueva, se queda con la impresora y el servicio se corta. No es para siempre: no le digas que es suya para siempre." },
-  { c: ["!msi", "sin intereses", "a meses", "!plazos", "6 meses", "12 meses"], r: "Solo hay 3 meses sin intereses con tarjeta ($4,100). NO ofrezcas 6 ni 12 meses: no están disponibles." },
+  { c: ["!msi", "sin intereses", "a meses", "!plazos", "6 meses", "12 meses"], r: "Solo hay 3 meses sin intereses con tarjeta ($4,150). NO ofrezcas 6 ni 12 meses: no están disponibles." },
   { c: ["!iphone", "!apple", "!android"], r: "Para la cocina y la impresora hace falta un teléfono o tableta Android con Chrome: con iPhone la impresora no se conecta. Los clientes que piden desde la mesa sí pueden usar cualquier celular, iPhone o Android, porque solo abren una página." },
   { c: ["trae", "incluye", "viene", "caja", "que trae"], r: "La caja trae la impresora térmica Bluetooth, las tarjetas con los códigos QR para las mesas, papel y el instructivo." },
   { c: ["!internet", "!wifi", "datos", "senal"], r: "Sí necesita internet: el WiFi del negocio o los datos del celular." },
@@ -35885,6 +35958,9 @@ var ESCRITURAS = {
   recarga: recargarTanque,
   tanque_comprar: tanqueComprar,
   kit_comprar: kitComprar,
+  kit_suscribir: kitSuscribir,
+  kit_enganche: kitEnganche,
+  kit_mensual: kitMensual,
   recargas_nuevas: recargasNuevas,
   promotor_cobro: promotorCobro,
   red_config: redConfigGuardar,
@@ -36241,7 +36317,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.17";  // version: "2.9.17"
+var VERSION_BETO = "2.9.18";  // version: "2.9.18"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -37012,6 +37088,25 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
   <span class="cuota"><b>$1,383.33</b><span>al mes &middot; total $4,150</span></span></button>
 <div class="msg" id="m"></div>
 <p class="ay">Solo tarjeta de cr&eacute;dito. El cobro lo hace Mercado Pago, no nosotros.</p>
+<p class="ay" style="margin-top:6px">El pago de contado o a 3 meses cubre <b>un a&ntilde;o</b> de servicio. Cada a&ntilde;o se renueva.</p>
+
+<div id="suscr" style="margin-top:28px">
+<label>O suscr&iacute;bete</label>
+<div class="trae" style="margin-bottom:12px"><b>$1,300 HOY Y $400 AL MES</b>
+<p>Pagas el enganche y luego $400 cada mes, con cobro autom&aacute;tico a tu tarjeta. Si dejas de pagar, te quedas con la impresora y el servicio se corta.</p></div>
+<div id="sDatos">
+<input style="width:100%;margin:0 0 9px;padding:13px 14px;border-radius:11px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;font-size:15px;font-family:inherit" id="sNeg" placeholder="Nombre de tu negocio">
+<input style="width:100%;margin:0 0 9px;padding:13px 14px;border-radius:11px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;font-size:15px;font-family:inherit" id="sDue" placeholder="Tu nombre">
+<input style="width:100%;margin:0 0 9px;padding:13px 14px;border-radius:11px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;font-size:15px;font-family:inherit" id="sTel" placeholder="Tu tel&eacute;fono (10 n&uacute;meros)" inputmode="tel">
+<input style="width:100%;margin:0 0 9px;padding:13px 14px;border-radius:11px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;font-size:15px;font-family:inherit" id="sCor" placeholder="Tu correo (ah&iacute; te llega el recibo)" inputmode="email">
+<button class="plazo" id="sEng"><span class="mes">Pagar el enganche</span><span class="cuota"><b>$1,300</b><span>tarjeta u OXXO</span></span></button>
+<button class="plazo" id="sEfe" style="border-style:dashed"><span class="mes">Ya pagu&eacute; el enganche en efectivo</span></button>
+</div>
+<div id="sMes" style="display:none">
+<p class="baja"><b>Paso 2 de 2.</b> Activa tu pago de <b>$400 al mes</b>. El primer cobro es dentro de un mes.</p>
+<button class="plazo" id="sAct"><span class="mes">Activar mi pago mensual</span><span class="cuota"><b>$400</b><span>al mes</span></span></button>
+</div>
+</div>
 
 <div class="trae" style="margin-top:26px"><b>QU&Eacute; TRAE LA CAJA</b>
 <p>La impresora con su funda, cable y rollos de papel.</p>
@@ -37028,10 +37123,54 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 var m = document.getElementById('m');
 function avisa(t, bien){ m.className = 'msg on' + (bien ? ' ok' : ''); m.innerHTML = t; }
 var qs = new URLSearchParams(location.search), pago = qs.get('pago') || '';
-if (pago === 'ok') avisa('<b>Listo, tu pago entr&oacute;.</b> Qui&eacute;n te atendi&oacute; ya lo ve. Guarda el correo de Mercado Pago.', true);
+if (pago === 'suscrito') avisa('<b>Listo, quedaste suscrito.</b> Cada mes se cobran $400 a tu tarjeta. Qui&eacute;n te atendi&oacute; ya lo ve.', true);
+else if (pago === 'ok') avisa('<b>Listo, tu pago entr&oacute;.</b> Qui&eacute;n te atendi&oacute; ya lo ve. Guarda el correo de Mercado Pago.', true);
 else if (pago === 'pendiente') avisa('Tu pago qued&oacute; en proceso. En cuanto lo aprueben, listo.', true);
 else if (pago === 'no') avisa('No se complet&oacute; el pago. Puedes intentarlo otra vez.');
-var botones = document.querySelectorAll('.plazo');
+var botones = document.querySelectorAll('.plazo[data-meses]');
+/* LA SUSCRIPCION. Solo el ID viaja en la direccion; los datos se quedan en el servidor. */
+(function(){
+  function $s(i){ return document.getElementById(i); }
+  function pideS(tipo, datos){
+    return fetch('/beto-guarda', { method: 'POST', headers: {'content-type':'application/json'},
+      body: JSON.stringify({ c: 'kit', tipo: tipo, datos: datos }) }).then(function(r){ return r.json(); });
+  }
+  var idS = qs.get('r') || '';
+  if (qs.get('paso') === 'mensual' && idS) {
+    $s('sDatos').style.display = 'none'; $s('sMes').style.display = 'block';
+    $s('suscr').scrollIntoView();
+    if (qs.get('eng') === 'pendiente') avisa('Tu enganche qued&oacute; en proceso (OXXO). Ya puedes activar tu pago mensual.', true);
+    else avisa('<b>Tu enganche entr&oacute;.</b> Falta un paso: activa tu pago mensual.', true);
+  }
+  function mensual(efectivo, b){
+    b.disabled = true; var antes = b.innerHTML; b.innerHTML = '<span class="mes">Abriendo Mercado Pago...</span>';
+    pideS('kit_mensual', { id: idS, efectivo: efectivo ? 1 : 0 }).then(function(r){
+      if (r && r.ok && r.liga) { location.href = r.liga; return; }
+      b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo abrir el pago.');
+    }).catch(function(){ b.disabled = false; b.innerHTML = antes; avisa('No se pudo abrir el pago. Revisa tu se&ntilde;al.'); });
+  }
+  function datos(luego, b){
+    var d = { negocio: $s('sNeg').value, dueno: $s('sDue').value, telefono: $s('sTel').value, correo: $s('sCor').value, vendedor: qs.get('v') || '' };
+    b.disabled = true; var antes = b.innerHTML; b.innerHTML = '<span class="mes">Un momento...</span>';
+    pideS('kit_suscribir', d).then(function(r){
+      if (!r || !r.ok) { b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo.'); return; }
+      idS = r.id; luego(b, antes);
+    }).catch(function(){ b.disabled = false; b.innerHTML = antes; avisa('No se pudo. Revisa tu se&ntilde;al.'); });
+  }
+  $s('sEng').onclick = function(){
+    datos(function(b, antes){
+      pideS('kit_enganche', { id: idS }).then(function(r){
+        if (r && r.ok && r.liga) { location.href = r.liga; return; }
+        b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo abrir el pago.');
+      });
+    }, this);
+  };
+  $s('sEfe').onclick = function(){
+    if (!confirm('Confirma que YA le pagaste los $1,300 en efectivo a quien te atendió.')) return;
+    datos(function(b){ mensual(true, b); }, this);
+  };
+  $s('sAct').onclick = function(){ mensual(false, this); };
+})();
 for (var i = 0; i < botones.length; i++) botones[i].addEventListener('click', function(){
   var meses = Number(this.getAttribute('data-meses')), yo = this;
   for (var k = 0; k < botones.length; k++) botones[k].disabled = true;
