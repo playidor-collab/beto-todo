@@ -12135,6 +12135,14 @@ header .cod{display:inline-block;margin-top:11px;background:rgba(255,255,255,.15
     <div class="cuerpo">
 
       <div id="tgArriba"></div>
+      <div id="guia" style="background:#fff;border:2px solid #0f7b52;border-radius:18px;padding:20px 18px 18px;margin-bottom:14px;text-align:center">
+        <div id="gPaso" style="font:800 12px system-ui;letter-spacing:1.5px;color:#0f7b52;text-transform:uppercase"></div>
+        <h2 id="gTitulo" style="margin:8px 0 6px;font-size:22px;line-height:1.25"></h2>
+        <p id="gTexto" style="margin:0 0 16px;color:#4d5a53;font-size:15px;line-height:1.5"></p>
+        <button class="btn" type="button" id="gBoton" style="background:#0f7b52;font-size:18px;min-height:60px"></button>
+        <button type="button" id="gOtro" style="margin-top:12px;border:0;background:none;color:#5b6b63;font:600 14px system-ui;text-decoration:underline"></button>
+      </div>
+      <button type="button" id="gMas" style="display:block;width:100%;margin:6px 0 14px;border:1px dashed #b9c6bf;border-radius:12px;background:none;padding:12px;color:#5b6b63;font:600 14px system-ui">Ver más opciones</button>
       <!-- PARA VENDER: lo que usa parado frente al dueno, hasta arriba. -->
       <div class="proy oculto" id="enApp" style="border-left-color:#c0392b;background:#fdecea;margin-bottom:14px">
         <h3 style="color:#8a2c20">&#9888;&#65039; Estás dentro de Telegram</h3>
@@ -12517,6 +12525,54 @@ function pinta(r){
   LIGA_TOCADOS = { p: P, s: S };
   $("bMagia").href = ORG + "/magia?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
   $("bSoporte").href = ORG + "/soporte?p=" + encodeURIComponent(P) + "&s=" + encodeURIComponent(S);
+  /* EL MODO GUIADO: un paso, un boton. Lo demas, en "Ver mas". Corre al
+     ultimo (setTimeout), despues de los avisos que se prenden solos. */
+  setTimeout(function(){
+    function lee(k){ try { return localStorage.getItem("guia_" + k) === "1"; } catch (e) { return false; } }
+    function pon(k){ try { localStorage.setItem("guia_" + k, "1"); } catch (e) {} }
+    var cuerpo = document.querySelector(".cuerpo");
+    var fijos = { tgArriba: 1, guia: 1, gMas: 1 };
+    var resto = [];
+    for (var i = 0; i < cuerpo.children.length; i++) { var h = cuerpo.children[i]; if (!fijos[h.id]) resto.push(h); }
+    var abierto = false;
+    function muestraResto(si){ abierto = si; for (var j = 0; j < resto.length; j++) resto[j].classList.toggle("oculto", !si);
+      $("gMas").textContent = si ? "Ocultar las demás opciones" : "Ver más opciones"; }
+    $("gMas").onclick = function(){ muestraResto(!abierto); };
+    muestraResto(false);
+    var ua = navigator.userAgent || "";
+    var dentro = ua.indexOf("Android") > -1 && (ua.indexOf("; wv)") > -1 || ua.indexOf("Telegram") > -1 || !("bluetooth" in navigator));
+    var yaEsIcono = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone;
+    var magia = $("bMagia").href, soporte = $("bSoporte").href;
+    function paso(n, total, titulo, texto, boton, alTocar, otro, alOtro){
+      $("gPaso").textContent = n ? ("Paso " + n + " de " + total) : "Para vender";
+      $("gTitulo").textContent = titulo; $("gTexto").innerHTML = texto; $("gBoton").innerHTML = boton;
+      $("gBoton").onclick = alTocar;
+      $("gOtro").textContent = otro || ""; $("gOtro").style.display = otro ? "inline" : "none"; $("gOtro").onclick = alOtro || null;
+    }
+    function decide(){
+      if (dentro) {
+        paso(1, 3, "Ábrela en Chrome", "<b>Esto lo haces una sola vez.</b><br>Aquí adentro de Telegram no funciona la impresora.", "Abrir en Chrome",
+          function(){ location.href = "intent://" + location.host + location.pathname + location.search + "#Intent;scheme=https;package=com.android.chrome;end"; },
+          "No se abrió", function(){ $("gTexto").innerHTML = "Toca los <b>tres puntitos</b> de arriba, a la derecha.<br>Luego toca <b>Abrir en Chrome</b>."; });
+        return;
+      }
+      if (!yaEsIcono && !lee("icono")) {
+        paso(2, 3, "Ponla en tu celular", "<b>Esto lo haces una sola vez.</b><br>Te queda un dibujito que dice <b>Mi Beto</b>. De ahí la abres siempre.", "&#128242; Ponerla en mi celular",
+          function(){ $("bInstala").click(); $("gTexto").innerHTML = $("instalaAy").classList.contains("oculto") ? "Si te sale <b>Instalar</b>, tócalo. Si no sale nada, toca <b>Ya la tengo</b>." : $("instalaAy").innerHTML; },
+          "Ya la tengo", function(){ pon("icono"); decide(); });
+        window.addEventListener("appinstalled", function(){ pon("icono"); decide(); });
+        return;
+      }
+      if (!lee("demo")) {
+        paso(3, 3, "Practica una vez", "Tómale foto a cualquier menú. Ten prendida tu impresora.", "&#10024; Practicar",
+          function(){ pon("demo"); location.href = magia; }, "", null);
+        return;
+      }
+      paso(0, 0, "Ya estás listo", "En el negocio: siéntate, mira el número de tu mesa y tómale foto al menú.", "&#10024; Hacer la demostración",
+        function(){ location.href = magia; }, "Tengo una duda", function(){ location.href = soporte; });
+    }
+    decide();
+  }, 0);
   /* DENTRO DE TELEGRAM (u otra app): el navegador de adentro no tiene
      Bluetooth web ni instala iconos. Se avisa y se ofrece abrir Chrome. */
   (function(){
@@ -13452,12 +13508,18 @@ input:focus{outline:0;border-color:#b3411a}
         <div class="palo">&#10024;</div>
         <h2 id="lTitulo">Pum. Ya quedó.</h2>
         <p id="lDice">Leí el menú. Ahora sí: voltea el teléfono.</p>
-        <a class="btn" id="bMesa" target="_blank" rel="noopener">Abrir la mesa</a>
-        <a class="btn gris chico" id="bCocina" target="_blank" rel="noopener">Ver la cocina — ahí cae el pedido</a>
-        <p style="margin-top:14px;font-size:13px;color:#75857c">Cuando el dueño diga
-          "¿y esto cómo le hago?", ésta es la puerta:</p>
-        <a class="btn verde" id="bAlta">Prenderlo de verdad · 7 días gratis</a>
-        <button class="btn gris chico" id="bOtra" type="button">Hacer otra magia</button>
+        <div id="mg1">
+          <p style="font:800 12px system-ui;letter-spacing:1.5px;color:#b3411a;margin:14px 0 4px">PASO 1 DE 2</p>
+          <p style="margin:0 0 12px">Abre la cocina.<br>Toca <b>Conectar impresora</b> y escoge la tuya.<br>Luego regresa aquí.</p>
+          <a class="btn" id="bCocina" target="_blank" rel="noopener">&#127859; Abrir la cocina</a>
+        </div>
+        <div id="mg2" class="oculto">
+          <p style="font:800 12px system-ui;letter-spacing:1.5px;color:#b3411a;margin:14px 0 4px">PASO 2 DE 2</p>
+          <p style="margin:0 0 12px">Dale tu teléfono al dueño.<br>Dile: <i>"pídale algo a su propio menú"</i>.<br>Cuando lo mande, regresa a la cocina: <b>ahí sale el ticket</b>.</p>
+          <a class="btn" id="bMesa" target="_blank" rel="noopener">Abrir la mesa</a>
+        </div>
+        <a id="bAlta" class="oculto"></a>
+        <button class="btn gris chico oculto" id="bOtra" type="button">Hacer otra demostración</button>
       </div>
 
     </div>
@@ -13544,6 +13606,9 @@ $("fFoto").onchange = function(){
       $("bMesa").href = ORG + r.liga_mesa;
       $("bCocina").href = ORG + r.liga_cocina;
       $("bAlta").href = ORG + "/prueba?de=promo&p=" + encodeURIComponent(P);
+      $("mg1").classList.remove("oculto"); $("mg2").classList.add("oculto"); $("bOtra").classList.add("oculto");
+      $("bCocina").onclick = function(){ setTimeout(function(){ $("mg1").classList.add("oculto"); $("mg2").classList.remove("oculto"); }, 800); };
+      $("bMesa").onclick = function(){ setTimeout(function(){ $("bOtra").classList.remove("oculto"); }, 800); };
     }).catch(function(){
       b.disabled = false; b.textContent = "📷 Tomarle la foto al menú";
       aviso.textContent = "Se cortó el internet a la mitad. Vuelve a darle.";
@@ -36427,7 +36492,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.21";  // version: "2.9.21"
+var VERSION_BETO = "2.9.22";  // version: "2.9.22"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
