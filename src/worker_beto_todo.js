@@ -1279,7 +1279,13 @@ window.IMPRESORA_WEB = (function(){
   var CANALES = [
     { s: "000018f0-0000-1000-8000-00805f9b34fb", c: "00002af1-0000-1000-8000-00805f9b34fb" },
     { s: "49535343-fe7d-4ae5-8fa9-9fafd205e455", c: "49535343-8841-43f4-a8d4-ecbe34729bb3" },
-    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" }
+    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" },
+    { s: "0000ff00-0000-1000-8000-00805f9b34fb", c: "0000ff02-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ffe0-0000-1000-8000-00805f9b34fb", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ae30-0000-1000-8000-00805f9b34fb", c: "0000ae01-0000-1000-8000-00805f9b34fb" },
+    { s: "0000fee7-0000-1000-8000-00805f9b34fb", c: "0000fec7-0000-1000-8000-00805f9b34fb" },
+    { s: "0000e0ff-3c17-d293-8e48-14fe2e4da212", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "6e400001-b5a3-f393-e0a9-e50e24dcca9e", c: "6e400002-b5a3-f393-e0a9-e50e24dcca9e" }
   ];
   var yo = { hay: !!(navigator.bluetooth), lista: false, nombre: "", alCambiar: null };
   var aparato = null, canal = null, sinRespuesta = false, TROZO = 180, cola = Promise.resolve();
@@ -1293,7 +1299,9 @@ window.IMPRESORA_WEB = (function(){
         return await sv.getCharacteristic(CANALES[i].c);
       } catch (e) {}
     }
+    window.VISTOS_IMP = "(ninguno)";
     var todos = await servidor.getPrimaryServices();
+    try { window.VISTOS_IMP = todos.map(function(x){ return String(x.uuid).slice(0, 8); }).join(" ") || "(ninguno)"; } catch (e) {}
     for (var j = 0; j < todos.length; j++) {
       var cs = await todos[j].getCharacteristics();
       for (var k = 0; k < cs.length; k++) {
@@ -1303,13 +1311,32 @@ window.IMPRESORA_WEB = (function(){
     return null;
   }
 
-  yo.conectar = async function(){
+  /* EL AVISO: que paso con la impresora, directo a Edsi (sin fotos). */
+  var pasoImp = "", yaImprimio = false;
+  function reportaImp(que, e){
+    try {
+      var m = e ? String((e.name || "") + ": " + (e.message || e)) : "";
+      var q = new URLSearchParams(location.search);
+      var quien = q.get("p") || q.get("c") || q.get("clave") || "";
+      fetch("/impresora-reporte", { method: "POST", keepalive: true, headers: { "content-type": "application/json" },
+        body: JSON.stringify({ que: que, paso: pasoImp, error: m, aparato: (aparato && aparato.name) || "",
+          servicios: window.VISTOS_IMP || "", pagina: location.pathname, quien: quien }) }).catch(function(){});
+    } catch (x) {}
+  }
+  yo.conectar = function(){
+    pasoImp = "abrir la lista"; window.VISTOS_IMP = "";
+    return conectarAdentro().then(function(n){ reportaImp("conecto", null); return n; },
+      function(e){ reportaImp("fallo", e); throw e; });
+  };
+  var conectarAdentro = async function(){
     if (!yo.hay) throw new Error("Este navegador no tiene Bluetooth. Usa Chrome.");
     aparato = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: CANALES.map(function(x){ return x.s; })
     });
+    pasoImp = "conectar";
     var servidor = await aparato.gatt.connect();
+    pasoImp = "buscar canal";
     canal = await buscaCanal(servidor);
     if (!canal) { try { aparato.gatt.disconnect(); } catch (e) {} throw new Error("Esa impresora no tiene por donde recibir."); }
     sinRespuesta = !!canal.properties.writeWithoutResponse;
@@ -1443,7 +1470,8 @@ window.IMPRESORA_WEB = (function(){
     if (!yo.lista || !canal) return Promise.reject(new Error("sin impresora"));
     var datos = dibuja(texto);
     cola = cola.then(function(){ return manda(datos); }, function(){ return manda(datos); });
-    return cola;
+    return cola.then(function(){ if (!yaImprimio) { yaImprimio = true; pasoImp = "imprimir"; reportaImp("imprimio", null); } },
+      function(e){ pasoImp = "imprimir"; reportaImp("no_imprimio", e); throw e; });
   };
   return yo;
 })();
@@ -2234,7 +2262,13 @@ window.IMPRESORA_WEB = (function(){
   var CANALES = [
     { s: "000018f0-0000-1000-8000-00805f9b34fb", c: "00002af1-0000-1000-8000-00805f9b34fb" },
     { s: "49535343-fe7d-4ae5-8fa9-9fafd205e455", c: "49535343-8841-43f4-a8d4-ecbe34729bb3" },
-    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" }
+    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" },
+    { s: "0000ff00-0000-1000-8000-00805f9b34fb", c: "0000ff02-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ffe0-0000-1000-8000-00805f9b34fb", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ae30-0000-1000-8000-00805f9b34fb", c: "0000ae01-0000-1000-8000-00805f9b34fb" },
+    { s: "0000fee7-0000-1000-8000-00805f9b34fb", c: "0000fec7-0000-1000-8000-00805f9b34fb" },
+    { s: "0000e0ff-3c17-d293-8e48-14fe2e4da212", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "6e400001-b5a3-f393-e0a9-e50e24dcca9e", c: "6e400002-b5a3-f393-e0a9-e50e24dcca9e" }
   ];
   var yo = { hay: !!(navigator.bluetooth), lista: false, nombre: "", alCambiar: null };
   var aparato = null, canal = null, sinRespuesta = false, TROZO = 180, cola = Promise.resolve();
@@ -2248,7 +2282,9 @@ window.IMPRESORA_WEB = (function(){
         return await sv.getCharacteristic(CANALES[i].c);
       } catch (e) {}
     }
+    window.VISTOS_IMP = "(ninguno)";
     var todos = await servidor.getPrimaryServices();
+    try { window.VISTOS_IMP = todos.map(function(x){ return String(x.uuid).slice(0, 8); }).join(" ") || "(ninguno)"; } catch (e) {}
     for (var j = 0; j < todos.length; j++) {
       var cs = await todos[j].getCharacteristics();
       for (var k = 0; k < cs.length; k++) {
@@ -2258,13 +2294,32 @@ window.IMPRESORA_WEB = (function(){
     return null;
   }
 
-  yo.conectar = async function(){
+  /* EL AVISO: que paso con la impresora, directo a Edsi (sin fotos). */
+  var pasoImp = "", yaImprimio = false;
+  function reportaImp(que, e){
+    try {
+      var m = e ? String((e.name || "") + ": " + (e.message || e)) : "";
+      var q = new URLSearchParams(location.search);
+      var quien = q.get("p") || q.get("c") || q.get("clave") || "";
+      fetch("/impresora-reporte", { method: "POST", keepalive: true, headers: { "content-type": "application/json" },
+        body: JSON.stringify({ que: que, paso: pasoImp, error: m, aparato: (aparato && aparato.name) || "",
+          servicios: window.VISTOS_IMP || "", pagina: location.pathname, quien: quien }) }).catch(function(){});
+    } catch (x) {}
+  }
+  yo.conectar = function(){
+    pasoImp = "abrir la lista"; window.VISTOS_IMP = "";
+    return conectarAdentro().then(function(n){ reportaImp("conecto", null); return n; },
+      function(e){ reportaImp("fallo", e); throw e; });
+  };
+  var conectarAdentro = async function(){
     if (!yo.hay) throw new Error("Este navegador no tiene Bluetooth. Usa Chrome.");
     aparato = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: CANALES.map(function(x){ return x.s; })
     });
+    pasoImp = "conectar";
     var servidor = await aparato.gatt.connect();
+    pasoImp = "buscar canal";
     canal = await buscaCanal(servidor);
     if (!canal) { try { aparato.gatt.disconnect(); } catch (e) {} throw new Error("Esa impresora no tiene por donde recibir."); }
     sinRespuesta = !!canal.properties.writeWithoutResponse;
@@ -2398,7 +2453,8 @@ window.IMPRESORA_WEB = (function(){
     if (!yo.lista || !canal) return Promise.reject(new Error("sin impresora"));
     var datos = dibuja(texto);
     cola = cola.then(function(){ return manda(datos); }, function(){ return manda(datos); });
-    return cola;
+    return cola.then(function(){ if (!yaImprimio) { yaImprimio = true; pasoImp = "imprimir"; reportaImp("imprimio", null); } },
+      function(e){ pasoImp = "imprimir"; reportaImp("no_imprimio", e); throw e; });
   };
   return yo;
 })();
@@ -21170,7 +21226,13 @@ window.IMPRESORA_WEB = (function(){
   var CANALES = [
     { s: "000018f0-0000-1000-8000-00805f9b34fb", c: "00002af1-0000-1000-8000-00805f9b34fb" },
     { s: "49535343-fe7d-4ae5-8fa9-9fafd205e455", c: "49535343-8841-43f4-a8d4-ecbe34729bb3" },
-    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" }
+    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" },
+    { s: "0000ff00-0000-1000-8000-00805f9b34fb", c: "0000ff02-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ffe0-0000-1000-8000-00805f9b34fb", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ae30-0000-1000-8000-00805f9b34fb", c: "0000ae01-0000-1000-8000-00805f9b34fb" },
+    { s: "0000fee7-0000-1000-8000-00805f9b34fb", c: "0000fec7-0000-1000-8000-00805f9b34fb" },
+    { s: "0000e0ff-3c17-d293-8e48-14fe2e4da212", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "6e400001-b5a3-f393-e0a9-e50e24dcca9e", c: "6e400002-b5a3-f393-e0a9-e50e24dcca9e" }
   ];
   var yo = { hay: !!(navigator.bluetooth), lista: false, nombre: "", alCambiar: null };
   var aparato = null, canal = null, sinRespuesta = false, TROZO = 180, cola = Promise.resolve();
@@ -21184,7 +21246,9 @@ window.IMPRESORA_WEB = (function(){
         return await sv.getCharacteristic(CANALES[i].c);
       } catch (e) {}
     }
+    window.VISTOS_IMP = "(ninguno)";
     var todos = await servidor.getPrimaryServices();
+    try { window.VISTOS_IMP = todos.map(function(x){ return String(x.uuid).slice(0, 8); }).join(" ") || "(ninguno)"; } catch (e) {}
     for (var j = 0; j < todos.length; j++) {
       var cs = await todos[j].getCharacteristics();
       for (var k = 0; k < cs.length; k++) {
@@ -21194,13 +21258,32 @@ window.IMPRESORA_WEB = (function(){
     return null;
   }
 
-  yo.conectar = async function(){
+  /* EL AVISO: que paso con la impresora, directo a Edsi (sin fotos). */
+  var pasoImp = "", yaImprimio = false;
+  function reportaImp(que, e){
+    try {
+      var m = e ? String((e.name || "") + ": " + (e.message || e)) : "";
+      var q = new URLSearchParams(location.search);
+      var quien = q.get("p") || q.get("c") || q.get("clave") || "";
+      fetch("/impresora-reporte", { method: "POST", keepalive: true, headers: { "content-type": "application/json" },
+        body: JSON.stringify({ que: que, paso: pasoImp, error: m, aparato: (aparato && aparato.name) || "",
+          servicios: window.VISTOS_IMP || "", pagina: location.pathname, quien: quien }) }).catch(function(){});
+    } catch (x) {}
+  }
+  yo.conectar = function(){
+    pasoImp = "abrir la lista"; window.VISTOS_IMP = "";
+    return conectarAdentro().then(function(n){ reportaImp("conecto", null); return n; },
+      function(e){ reportaImp("fallo", e); throw e; });
+  };
+  var conectarAdentro = async function(){
     if (!yo.hay) throw new Error("Este navegador no tiene Bluetooth. Usa Chrome.");
     aparato = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: CANALES.map(function(x){ return x.s; })
     });
+    pasoImp = "conectar";
     var servidor = await aparato.gatt.connect();
+    pasoImp = "buscar canal";
     canal = await buscaCanal(servidor);
     if (!canal) { try { aparato.gatt.disconnect(); } catch (e) {} throw new Error("Esa impresora no tiene por donde recibir."); }
     sinRespuesta = !!canal.properties.writeWithoutResponse;
@@ -21334,7 +21417,8 @@ window.IMPRESORA_WEB = (function(){
     if (!yo.lista || !canal) return Promise.reject(new Error("sin impresora"));
     var datos = dibuja(texto);
     cola = cola.then(function(){ return manda(datos); }, function(){ return manda(datos); });
-    return cola;
+    return cola.then(function(){ if (!yaImprimio) { yaImprimio = true; pasoImp = "imprimir"; reportaImp("imprimio", null); } },
+      function(e){ pasoImp = "imprimir"; reportaImp("no_imprimio", e); throw e; });
   };
   return yo;
 })();
@@ -36509,7 +36593,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.24";  // version: "2.9.24"
+var VERSION_BETO = "2.9.25";  // version: "2.9.25"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -36683,7 +36767,13 @@ p{font-size:15px;line-height:1.5;color:#c9d0d8;margin:0 0 12px}
   var CANALES = [
     { s: "000018f0-0000-1000-8000-00805f9b34fb", c: "00002af1-0000-1000-8000-00805f9b34fb" },
     { s: "49535343-fe7d-4ae5-8fa9-9fafd205e455", c: "49535343-8841-43f4-a8d4-ecbe34729bb3" },
-    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" }
+    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" },
+    { s: "0000ff00-0000-1000-8000-00805f9b34fb", c: "0000ff02-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ffe0-0000-1000-8000-00805f9b34fb", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ae30-0000-1000-8000-00805f9b34fb", c: "0000ae01-0000-1000-8000-00805f9b34fb" },
+    { s: "0000fee7-0000-1000-8000-00805f9b34fb", c: "0000fec7-0000-1000-8000-00805f9b34fb" },
+    { s: "0000e0ff-3c17-d293-8e48-14fe2e4da212", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "6e400001-b5a3-f393-e0a9-e50e24dcca9e", c: "6e400002-b5a3-f393-e0a9-e50e24dcca9e" }
   ];
   var aparato = null, canal = null, sinRespuesta = false;
 
@@ -36822,7 +36912,9 @@ p{font-size:15px;line-height:1.5;color:#c9d0d8;margin:0 0 12px}
       } catch (e) {}
     }
     di("ninguno de los canales conocidos; buscando cualquiera que acepte escritura...", "gris");
+    window.VISTOS_IMP = "(ninguno)";
     var todos = await servidor.getPrimaryServices();
+    try { window.VISTOS_IMP = todos.map(function(x){ return String(x.uuid).slice(0, 8); }).join(" ") || "(ninguno)"; } catch (e) {}
     for (var j = 0; j < todos.length; j++) {
       var cs = await todos[j].getCharacteristics();
       for (var k = 0; k < cs.length; k++) {
@@ -37992,7 +38084,13 @@ window.IMPRESORA_WEB = (function(){
   var CANALES = [
     { s: "000018f0-0000-1000-8000-00805f9b34fb", c: "00002af1-0000-1000-8000-00805f9b34fb" },
     { s: "49535343-fe7d-4ae5-8fa9-9fafd205e455", c: "49535343-8841-43f4-a8d4-ecbe34729bb3" },
-    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" }
+    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" },
+    { s: "0000ff00-0000-1000-8000-00805f9b34fb", c: "0000ff02-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ffe0-0000-1000-8000-00805f9b34fb", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ae30-0000-1000-8000-00805f9b34fb", c: "0000ae01-0000-1000-8000-00805f9b34fb" },
+    { s: "0000fee7-0000-1000-8000-00805f9b34fb", c: "0000fec7-0000-1000-8000-00805f9b34fb" },
+    { s: "0000e0ff-3c17-d293-8e48-14fe2e4da212", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "6e400001-b5a3-f393-e0a9-e50e24dcca9e", c: "6e400002-b5a3-f393-e0a9-e50e24dcca9e" }
   ];
   var yo = { hay: !!(navigator.bluetooth), lista: false, nombre: "", alCambiar: null };
   var aparato = null, canal = null, sinRespuesta = false, TROZO = 180, cola = Promise.resolve();
@@ -38006,7 +38104,9 @@ window.IMPRESORA_WEB = (function(){
         return await sv.getCharacteristic(CANALES[i].c);
       } catch (e) {}
     }
+    window.VISTOS_IMP = "(ninguno)";
     var todos = await servidor.getPrimaryServices();
+    try { window.VISTOS_IMP = todos.map(function(x){ return String(x.uuid).slice(0, 8); }).join(" ") || "(ninguno)"; } catch (e) {}
     for (var j = 0; j < todos.length; j++) {
       var cs = await todos[j].getCharacteristics();
       for (var k = 0; k < cs.length; k++) {
@@ -38016,13 +38116,32 @@ window.IMPRESORA_WEB = (function(){
     return null;
   }
 
-  yo.conectar = async function(){
+  /* EL AVISO: que paso con la impresora, directo a Edsi (sin fotos). */
+  var pasoImp = "", yaImprimio = false;
+  function reportaImp(que, e){
+    try {
+      var m = e ? String((e.name || "") + ": " + (e.message || e)) : "";
+      var q = new URLSearchParams(location.search);
+      var quien = q.get("p") || q.get("c") || q.get("clave") || "";
+      fetch("/impresora-reporte", { method: "POST", keepalive: true, headers: { "content-type": "application/json" },
+        body: JSON.stringify({ que: que, paso: pasoImp, error: m, aparato: (aparato && aparato.name) || "",
+          servicios: window.VISTOS_IMP || "", pagina: location.pathname, quien: quien }) }).catch(function(){});
+    } catch (x) {}
+  }
+  yo.conectar = function(){
+    pasoImp = "abrir la lista"; window.VISTOS_IMP = "";
+    return conectarAdentro().then(function(n){ reportaImp("conecto", null); return n; },
+      function(e){ reportaImp("fallo", e); throw e; });
+  };
+  var conectarAdentro = async function(){
     if (!yo.hay) throw new Error("Este navegador no tiene Bluetooth. Usa Chrome.");
     aparato = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: CANALES.map(function(x){ return x.s; })
     });
+    pasoImp = "conectar";
     var servidor = await aparato.gatt.connect();
+    pasoImp = "buscar canal";
     canal = await buscaCanal(servidor);
     if (!canal) { try { aparato.gatt.disconnect(); } catch (e) {} throw new Error("Esa impresora no tiene por donde recibir."); }
     sinRespuesta = !canal.properties.write && !!canal.properties.writeWithoutResponse;
@@ -38156,7 +38275,8 @@ window.IMPRESORA_WEB = (function(){
     if (!yo.lista || !canal) return Promise.reject(new Error("sin impresora"));
     var datos = dibuja(texto);
     cola = cola.then(function(){ return manda(datos); }, function(){ return manda(datos); });
-    return cola;
+    return cola.then(function(){ if (!yaImprimio) { yaImprimio = true; pasoImp = "imprimir"; reportaImp("imprimio", null); } },
+      function(e){ pasoImp = "imprimir"; reportaImp("no_imprimio", e); throw e; });
   };
   /* Un lienzo ya dibujado -- el papelito del kit, con su QR -- va directo al
      papel, sin pasar por el dibujante de texto. */
@@ -38649,7 +38769,13 @@ window.IMPRESORA_WEB = (function(){
   var CANALES = [
     { s: "000018f0-0000-1000-8000-00805f9b34fb", c: "00002af1-0000-1000-8000-00805f9b34fb" },
     { s: "49535343-fe7d-4ae5-8fa9-9fafd205e455", c: "49535343-8841-43f4-a8d4-ecbe34729bb3" },
-    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" }
+    { s: "e7810a71-73ae-499d-8c15-faa9aef0c3f2", c: "bef8d6c9-9c21-4c9e-b632-bd58c1009f9f" },
+    { s: "0000ff00-0000-1000-8000-00805f9b34fb", c: "0000ff02-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ffe0-0000-1000-8000-00805f9b34fb", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "0000ae30-0000-1000-8000-00805f9b34fb", c: "0000ae01-0000-1000-8000-00805f9b34fb" },
+    { s: "0000fee7-0000-1000-8000-00805f9b34fb", c: "0000fec7-0000-1000-8000-00805f9b34fb" },
+    { s: "0000e0ff-3c17-d293-8e48-14fe2e4da212", c: "0000ffe1-0000-1000-8000-00805f9b34fb" },
+    { s: "6e400001-b5a3-f393-e0a9-e50e24dcca9e", c: "6e400002-b5a3-f393-e0a9-e50e24dcca9e" }
   ];
   var yo = { hay: !!(navigator.bluetooth), lista: false, nombre: "", alCambiar: null };
   var aparato = null, canal = null, sinRespuesta = false, TROZO = 180, cola = Promise.resolve();
@@ -38663,7 +38789,9 @@ window.IMPRESORA_WEB = (function(){
         return await sv.getCharacteristic(CANALES[i].c);
       } catch (e) {}
     }
+    window.VISTOS_IMP = "(ninguno)";
     var todos = await servidor.getPrimaryServices();
+    try { window.VISTOS_IMP = todos.map(function(x){ return String(x.uuid).slice(0, 8); }).join(" ") || "(ninguno)"; } catch (e) {}
     for (var j = 0; j < todos.length; j++) {
       var cs = await todos[j].getCharacteristics();
       for (var k = 0; k < cs.length; k++) {
@@ -38673,13 +38801,32 @@ window.IMPRESORA_WEB = (function(){
     return null;
   }
 
-  yo.conectar = async function(){
+  /* EL AVISO: que paso con la impresora, directo a Edsi (sin fotos). */
+  var pasoImp = "", yaImprimio = false;
+  function reportaImp(que, e){
+    try {
+      var m = e ? String((e.name || "") + ": " + (e.message || e)) : "";
+      var q = new URLSearchParams(location.search);
+      var quien = q.get("p") || q.get("c") || q.get("clave") || "";
+      fetch("/impresora-reporte", { method: "POST", keepalive: true, headers: { "content-type": "application/json" },
+        body: JSON.stringify({ que: que, paso: pasoImp, error: m, aparato: (aparato && aparato.name) || "",
+          servicios: window.VISTOS_IMP || "", pagina: location.pathname, quien: quien }) }).catch(function(){});
+    } catch (x) {}
+  }
+  yo.conectar = function(){
+    pasoImp = "abrir la lista"; window.VISTOS_IMP = "";
+    return conectarAdentro().then(function(n){ reportaImp("conecto", null); return n; },
+      function(e){ reportaImp("fallo", e); throw e; });
+  };
+  var conectarAdentro = async function(){
     if (!yo.hay) throw new Error("Este navegador no tiene Bluetooth. Usa Chrome.");
     aparato = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
       optionalServices: CANALES.map(function(x){ return x.s; })
     });
+    pasoImp = "conectar";
     var servidor = await aparato.gatt.connect();
+    pasoImp = "buscar canal";
     canal = await buscaCanal(servidor);
     if (!canal) { try { aparato.gatt.disconnect(); } catch (e) {} throw new Error("Esa impresora no tiene por donde recibir."); }
     sinRespuesta = !canal.properties.write && !!canal.properties.writeWithoutResponse;
@@ -38813,7 +38960,8 @@ window.IMPRESORA_WEB = (function(){
     if (!yo.lista || !canal) return Promise.reject(new Error("sin impresora"));
     var datos = dibuja(texto);
     cola = cola.then(function(){ return manda(datos); }, function(){ return manda(datos); });
-    return cola;
+    return cola.then(function(){ if (!yaImprimio) { yaImprimio = true; pasoImp = "imprimir"; reportaImp("imprimio", null); } },
+      function(e){ pasoImp = "imprimir"; reportaImp("no_imprimio", e); throw e; });
   };
   /* Un lienzo ya dibujado -- el papelito del kit, con su QR -- va directo al
      papel, sin pasar por el dibujante de texto. */
@@ -40170,6 +40318,32 @@ await chatAvisar(env, cfg,
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
+    }
+    if (ruta === "/impresora-reporte" && request.method === "POST") {
+      let d = {};
+      try { d = JSON.parse((await request.text()).slice(0, 4000)); } catch (e) {}
+      const L = (x, n) => String(x == null ? "" : x).replace(/[<>&]/g, "").slice(0, n);
+      const reg = { fecha: new Date().toISOString(), que: L(d.que, 20), paso: L(d.paso, 30), error: L(d.error, 300),
+        aparato: L(d.aparato, 60), servicios: L(d.servicios, 400), pagina: L(d.pagina, 40), quien: L(d.quien, 40),
+        telefono: L(request.headers.get("user-agent"), 200) };
+      const dia = new Date(Date.now() - 6 * 3600e3).toISOString().slice(0, 10);
+      const ya = await env.FOTOS.list({ prefix: "impresora/" + dia + "/", limit: 100 });
+      const n = (ya.objects || []).length;
+      if (n >= 80) return json({ ok: true, tope: true });
+      await env.FOTOS.put("impresora/" + dia + "/" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ".json",
+        JSON.stringify(reg), { httpMetadata: { contentType: "application/json" } });
+      if (n < 20) {
+        const titulo = { conecto: "se CONECTÓ ✅", imprimio: "IMPRIMIÓ ✅", fallo: "NO se conectó ❌", no_imprimio: "NO imprimió ❌" }[reg.que] || reg.que;
+        const android = (reg.telefono.match(/Android [0-9.]+/) || [""])[0];
+        const chrome = (reg.telefono.match(/Chrome\/[0-9]+/) || [""])[0];
+        await avisaEdsiRed(env, "\u{1F5A8} <b>Impresora " + titulo + "</b>\n" +
+          "Quién: " + (reg.quien || "?") + " · " + reg.pagina + "\n" +
+          "Aparato: " + (reg.aparato || "(no escogió)") + "\n" +
+          (reg.error ? "Paso: " + reg.paso + "\nError: " + reg.error + "\n" : "") +
+          (reg.servicios ? "Canales que vio: " + reg.servicios + "\n" : "") +
+          "Teléfono: " + [android, chrome].filter(Boolean).join(" · "));
+      }
+      return json({ ok: true });
     }
     if (ruta === "/simular-ya") {
       return new Response(HTML_SIMULAR_YA, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
