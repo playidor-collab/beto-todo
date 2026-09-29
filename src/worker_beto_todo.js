@@ -36749,7 +36749,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.26";  // version: "2.9.26"
+var VERSION_BETO = "2.9.27";  // version: "2.9.27"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39790,7 +39790,7 @@ await chatAvisar(env, cfg,
     /* EL QR DE PAGO. Va impreso en el papel que trae el vendedor: el cliente
        lo escanea, escoge su plazo y paga con su tarjeta. */
     if (ruta === "/comprar" || ruta === "/comprarla") {
-      return new Response(HTML_COMPRA.replace("<!--STRIPE_CONTADO-->", hayStripe(env) ? STRIPE_CONTADO_HTML : ""), {
+      return new Response(HTML_COMPRA.replace("<!--STRIPE_CONTADO-->", hayStripe(env) && (stripeEnVivo(env) || q.get("prueba") === "stripe") ? STRIPE_CONTADO_HTML : ""), {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
