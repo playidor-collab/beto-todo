@@ -36964,7 +36964,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.31";  // version: "2.9.31"
+var VERSION_BETO = "2.9.32";  // version: "2.9.32"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -37704,6 +37704,82 @@ __name(mapaDeKits, "mapaDeKits");
 var STRIPE_CONTADO_HTML = '<div style="margin-top:24px"><label>O de contado, desde aqu&iacute;</label>' +
   '<button class="plazo" id="bContado"><span class="mes">De contado</span><span class="cuota"><b>$3,700</b><span>tarjeta, OXXO o transferencia</span></span></button>' +
   '<p class="ay">El cobro lo hace Stripe. Con OXXO o transferencia te da una ficha y tienes 3 d&iacute;as para pagar. Por ahora no emitimos factura.</p></div>';
+var HTML_PRIVACIDAD = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aviso de privacidad · La Carta</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#f6f7f5;color:#1d2420;font-family:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+.tapa{max-width:680px;margin:0 auto;padding:28px 18px 60px}
+.marca{font-size:17px;font-weight:900;letter-spacing:2.4px}
+h1{font-size:26px;line-height:1.2;margin:18px 0 6px}
+.fecha{color:#66736c;font-size:13.5px;margin:0 0 22px}
+h2{font-size:17px;margin:26px 0 8px}
+p,li{font-size:15.5px;line-height:1.6;color:#2c3530}
+ul{padding-left:20px;margin:6px 0}
+li{margin-bottom:5px}
+.falta{background:#fff3c4;border-radius:4px;padding:0 4px}
+.caja{background:#fff;border:1px solid #dde3df;border-radius:12px;padding:14px 16px}
+</style></head><body><div class="tapa">
+<div class="marca">LA CARTA</div>
+<h1>Aviso de privacidad</h1>
+<p class="fecha">&Uacute;ltima actualizaci&oacute;n: 29 de septiembre de 2026</p>
+
+<div class="caja"><p style="margin:0">En corto: usamos tus datos solo para que funcione el servicio y para cobrarlo. <b>No los vendemos.</b> Los datos de tu tarjeta no los vemos nunca: los maneja quien cobra (Stripe o Mercado Pago). Puedes pedirnos que los corrijamos o los borremos cuando quieras.</p></div>
+
+<h2>1. Qui&eacute;n es responsable de tus datos</h2>
+<p><b>Edsi Fabi&aacute;n P&eacute;rez Jaramillo</b>, con el nombre comercial <b>La Carta</b> (lacartamenu.com), Manzanillo, Colima. Domicilio para o&iacute;r y recibir notificaciones: Calle Neptuno 229, Valle Esmeralda, Barrio 4, C.P. 28219, Manzanillo, Colima, M&eacute;xico. Para cualquier cosa sobre tus datos escribe a <b>privacidad@lacartamenu.com</b>.</p>
+
+<h2>2. Qu&eacute; datos usamos</h2>
+<p><b>Si tienes un negocio en La Carta:</b></p>
+<ul>
+<li>El nombre de tu negocio, tu nombre, tu tel&eacute;fono y tu correo.</li>
+<li>Tu men&uacute; (tambi&eacute;n la foto del men&uacute;, si nos la mandas), tus precios, los pedidos, las ventas, los cortes y los gastos que anotes, con la foto del ticket si la tomas.</li>
+<li>Los NIP de tu equipo, para saber qui&eacute;n entra a cada pantalla.</li>
+<li>La ubicaci&oacute;n de tus repartidores mientras llevan un pedido, si usas esa funci&oacute;n.</li>
+</ul>
+<p><b>Si pides en un negocio que usa La Carta:</b></p>
+<ul>
+<li>Lo que pides y, si lo das, tu nombre, tu tel&eacute;fono y tu direcci&oacute;n o ubicaci&oacute;n para llevarte el pedido.</li>
+<li>Lo que le escribes a Beto, el asistente que contesta por el negocio.</li>
+</ul>
+<p><b>Si vendes La Carta:</b> tu nombre, tu tel&eacute;fono, tu usuario de Telegram, las visitas que registras y las dudas que haces, tambi&eacute;n las de voz.</p>
+<p><b>No te pedimos datos sensibles</b> (salud, religi&oacute;n, origen, preferencias ni nada parecido).</p>
+
+<h2>3. Para qu&eacute; los usamos</h2>
+<p><b>Para lo que es indispensable:</b></p>
+<ul>
+<li>Que funcionen el men&uacute;, los pedidos, la cocina, la caja, la impresora y Beto.</li>
+<li>Cobrar el servicio y avisarte de tus pagos.</li>
+<li>Darte soporte y avisos del servicio, por ejemplo por Telegram.</li>
+</ul>
+<p><b>Para algo que no es indispensable:</b> ver, sin decir qui&eacute;n eres, c&oacute;mo se usa el servicio para mejorarlo. Si no quieres esto, escr&iacute;benos y lo dejamos de hacer con tus datos. No afecta el servicio.</p>
+
+<h2>4. Con qui&eacute;n se comparten</h2>
+<p>Solo con los servicios que necesitamos para que La Carta funcione. Ellos los manejan por nuestra cuenta y no pueden usarlos para otra cosa:</p>
+<ul>
+<li><b>Cloudflare:</b> donde vive la p&aacute;gina y se guardan las fotos.</li>
+<li><b>n8n:</b> donde se guardan las tablas del negocio (men&uacute;, pedidos, clientes).</li>
+<li><b>OpenAI:</b> para leer la foto del men&uacute;, para que Beto conteste y para pasar notas de voz a texto.</li>
+<li><b>Stripe:</b> cobro en l&iacute;nea y reembolsos. Los datos de pago los recibe directamente Stripe; nosotros nunca vemos la tarjeta. Opera en EE. UU. y en todo el mundo.</li>
+<li><b>Mercado Pago:</b> cobro con tarjeta a meses. Igual: los datos de la tarjeta se quedan con ellos.</li>
+<li><b>Telegram:</b> para mandar avisos.</li>
+</ul>
+<p>Tambi&eacute;n los entregar&iacute;amos si una autoridad lo pide conforme a la ley. <b>Nunca vendemos tus datos.</b></p>
+
+<h2>5. Tus derechos</h2>
+<p>Puedes pedirnos en cualquier momento <b>ver</b> tus datos, <b>corregirlos</b>, <b>borrarlos</b> o <b>que dejemos de usarlos</b> para algo (esto se conoce como derechos ARCO). Tambi&eacute;n puedes quitarnos tu permiso para usarlos.</p>
+<p>Escr&iacute;benos a <b>privacidad@lacartamenu.com</b> con tu nombre, qu&eacute; quieres que hagamos y c&oacute;mo te contestamos. Te respondemos en m&aacute;ximo 20 d&iacute;as h&aacute;biles. Si borras tus datos, algunas cosas del servicio pueden dejar de funcionar para ti.</p>
+
+<h2>6. Cu&aacute;nto tiempo los guardamos</h2>
+<p>Mientras uses el servicio. Cuando lo dejas o nos pides borrarlos, los borramos, salvo el <b>registro de pagos</b> (n&uacute;mero de pago, monto, fecha y estado, sin datos de tarjeta), que la ley fiscal nos obliga a guardar <b>5 a&ntilde;os</b>.</p>
+
+<h2>7. Lo que guarda tu celular</h2>
+<p>Las pantallas de La Carta guardan en tu propio celular cosas peque&ntilde;as, como en qu&eacute; paso ibas o qu&eacute; impresora usas, para no pregunt&aacute;rtelo cada vez. No usamos cookies de publicidad ni te rastreamos en otras p&aacute;ginas.</p>
+
+<h2>8. Si cambiamos este aviso</h2>
+<p>Lo publicamos en esta misma p&aacute;gina, <b>lacartamenu.com/privacidad</b>, con la fecha nueva arriba.</p>
+</div></body></html>`;
 var HTML_COMPRA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>La Carta &middot; Comandero C1</title>
@@ -37777,7 +37853,7 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 
 <p class="ay">Funciona con tel&eacute;fono o tableta <b>Android</b>. No es compatible con iPhone ni iPad. Necesita internet en el negocio.</p>
 
-<div class="pie">Los tickets que imprime el equipo son documentos informativos, no comprobantes fiscales.</div>
+<div class="pie">Los tickets que imprime el equipo son documentos informativos, no comprobantes fiscales.<br><a href="/privacidad" style="color:#8fd6ac">Aviso de privacidad</a></div>
 </div>
 <script>
 var m = document.getElementById('m');
@@ -40010,6 +40086,9 @@ await chatAvisar(env, cfg,
        lo usa para dar de alta un negocio. */
     /* EL QR DE PAGO. Va impreso en el papel que trae el vendedor: el cliente
        lo escanea, escoge su plazo y paga con su tarjeta. */
+    if (ruta === "/privacidad" || ruta === "/aviso-de-privacidad") {
+      return new Response(HTML_PRIVACIDAD, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" } });
+    }
     if (ruta === "/comprar" || ruta === "/comprarla") {
       return new Response(HTML_COMPRA.replace("<!--STRIPE_CONTADO-->", hayStripe(env) && (stripeEnVivo(env) || q.get("prueba") === "stripe") ? STRIPE_CONTADO_HTML : ""), {
         status: 200,
