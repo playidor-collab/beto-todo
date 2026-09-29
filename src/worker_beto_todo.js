@@ -35586,6 +35586,24 @@ async function stripePide(env, metodo, camino, pares, idem) {
   if (!r.ok) throw new Error("Stripe no aceptó (" + r.status + (j && j.error && j.error.code ? " " + j.error.code : "") + ")");
   return j || {};
 }
+/* Una sesion de pago de una sola vez. Si Stripe la rechaza por la
+   transferencia (SPEI todavia no habilitado en la cuenta), se pide otra vez
+   sin ella: mas vale cobrar con tarjeta u OXXO que no cobrar. */
+function stripeSinSpei(pares) {
+  const fuera = pares.filter((kv) => !(kv[1] === "customer_balance" || kv[0].indexOf("payment_method_options[customer_balance]") === 0));
+  let i = 0;
+  return fuera.map((kv) => /^payment_method_types\[\d+\]$/.test(kv[0]) ? ["payment_method_types[" + (i++) + "]", kv[1]] : kv);
+}
+async function stripeSesionPago(env, pares, idem) {
+  const conSpei = pares.some((kv) => kv[1] === "customer_balance");
+  if (conSpei && String(env.STRIPE_SIN_SPEI || "").trim() === "si") return await stripePide(env, "POST", "/v1/checkout/sessions", stripeSinSpei(pares), idem + "-s");
+  try {
+    return await stripePide(env, "POST", "/v1/checkout/sessions", pares, idem);
+  } catch (e) {
+    if (!conSpei) throw e;
+    return await stripePide(env, "POST", "/v1/checkout/sessions", stripeSinSpei(pares), idem + "-s");
+  }
+}
 /* Stripe-Signature: t=<seg>,v1=<hex>  firma = HMAC-SHA256(whsec, t + "." + cuerpo crudo) */
 async function stripeFirmaValida(crudo, encabezado, secreto, ahoraSeg) {
   if (!secreto || !encabezado) return false;
@@ -35648,7 +35666,7 @@ async function tanqueStripe(env, clave, d) {
   const base = origenPublico(cual, String(d.__origen || ""));
   const cliente = await stripeClienteNegocio(env, cual, negocio);
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  const ses = await stripePide(env, "POST", "/v1/checkout/sessions", [
+  const ses = await stripeSesionPago(env, [
     ["mode", "payment"], ["customer", cliente], ["client_reference_id", cual], ["locale", "es-419"],
     ["line_items[0][quantity]", "1"],
     ["line_items[0][price_data][currency]", "mxn"],
@@ -35818,7 +35836,7 @@ async function kitContado(env, clave, d) {
     ["payment_method_options[customer_balance][funding_type]", "bank_transfer"],
     ["payment_method_options[customer_balance][bank_transfer][type]", "mx_bank_transfer"]
   ];
-  const ses = await stripePide(env, "POST", "/v1/checkout/sessions", p, "kit-" + id);
+  const ses = await stripeSesionPago(env, p, "kit-" + id);
   const liga = String(ses.url || "");
   if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
   await stripeGuarda(env, "compras/" + id + ".json", { id, que: "kit", monto: KIT_CONTADO, vendedor, fecha: isoMX(), estado: "abierta", sesion: String(ses.id || "") });
@@ -36944,7 +36962,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.29";  // version: "2.9.29"
+var VERSION_BETO = "2.9.30";  // version: "2.9.30"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
