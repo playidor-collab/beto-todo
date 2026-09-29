@@ -35560,6 +35560,161 @@ __name(plazoDe, "plazoDe");
    llave, solo el plazo. Lo unico que hace es devolver la liga de Mercado
    Pago; no prende nada ni toca ningun negocio. */
 var SUSCRIPCION = { enganche: 1300, mensual: 400 };
+
+/* ---------------------------------------------------------------------------
+   STRIPE. Tarjeta, OXXO y transferencia (SPEI). La llave es RESTRINGIDA
+   (rk_): solo puede crear clientes y sesiones de pago; no puede reembolsar
+   ni ver saldos. Sin las dos llaves, nada de esto aparece. */
+var STRIPE_API = "https://api.stripe.com";
+var KIT_CONTADO = 3700;
+function hayStripe(env) {
+  return !!(env && /^rk_(test|live)_[A-Za-z0-9]{20,}$/.test(String(env.STRIPE_KEY || "").trim()) && /^whsec_[A-Za-z0-9]{20,}$/.test(String(env.STRIPE_FIRMA || "").trim()));
+}
+function stripeEnVivo(env) { return /^rk_live_/.test(String(env.STRIPE_KEY || "").trim()); }
+async function stripePide(env, metodo, camino, pares, idem) {
+  const h = { authorization: "Bearer " + String(env.STRIPE_KEY || "").trim() };
+  let body;
+  if (pares) {
+    h["content-type"] = "application/x-www-form-urlencoded";
+    body = pares.map((kv) => encodeURIComponent(kv[0]) + "=" + encodeURIComponent(kv[1])).join("&");
+  }
+  if (idem) h["idempotency-key"] = idem;
+  const r = await fetch(STRIPE_API + camino, { method: metodo, headers: h, body });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error("Stripe no aceptó (" + r.status + (j && j.error && j.error.code ? " " + j.error.code : "") + ")");
+  return j || {};
+}
+/* Stripe-Signature: t=<seg>,v1=<hex>  firma = HMAC-SHA256(whsec, t + "." + cuerpo crudo) */
+async function stripeFirmaValida(crudo, encabezado, secreto, ahoraSeg) {
+  if (!secreto || !encabezado) return false;
+  let t = "";
+  const v1 = [];
+  String(encabezado).split(",").forEach((parte) => {
+    const i = parte.indexOf("=");
+    if (i < 0) return;
+    const k = parte.slice(0, i).trim(), v = parte.slice(i + 1).trim();
+    if (k === "t") t = v;
+    if (k === "v1") v1.push(v);
+  });
+  if (!/^\d{9,11}$/.test(t) || !v1.length) return false;
+  if (Math.abs(ahoraSeg - Number(t)) > 300) return false;
+  const enc = new TextEncoder();
+  const llave = await crypto.subtle.importKey("raw", enc.encode(secreto), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const firma = await crypto.subtle.sign("HMAC", llave, enc.encode(t + "." + crudo));
+  const esperado = Array.from(new Uint8Array(firma)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return v1.some((x) => {
+    if (x.length !== esperado.length) return false;
+    let d = 0;
+    for (let i = 0; i < x.length; i++) d |= x.charCodeAt(i) ^ esperado.charCodeAt(i);
+    return d === 0;
+  });
+}
+async function stripeGuarda(env, llave, obj) {
+  await env.FOTOS.put(llave, JSON.stringify(obj), { httpMetadata: { contentType: "application/json" } });
+}
+async function stripeLee(env, llave) {
+  const o = await env.FOTOS.get(llave);
+  if (!o) return null;
+  try { return JSON.parse(await o.text()); } catch (e) { return null; }
+}
+/* EL KIT DE CONTADO. Lo pide un desconocido desde la calle: no prende nada. */
+async function kitContado(env, clave, d) {
+  if (!hayStripe(env)) throw new Error("todavía no se puede pagar así; paga en efectivo con quien te atendió");
+  const base = origenPublico("", String(d && d.__origen || ""));
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const vendedor = String(d && d.vendedor || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 20).toUpperCase();
+  const cli = await stripePide(env, "POST", "/v1/customers",
+    [["description", "Comprador del kit La Carta " + id], ["metadata[compra]", id]], "cli-" + id);
+  if (!/^cus_/.test(String(cli.id || ""))) throw new Error("Stripe no abrió la cuenta del comprador");
+  const p = [
+    ["mode", "payment"], ["customer", cli.id], ["client_reference_id", id], ["locale", "es-419"],
+    ["line_items[0][quantity]", "1"],
+    ["line_items[0][price_data][currency]", "mxn"],
+    ["line_items[0][price_data][unit_amount]", String(KIT_CONTADO * 100)],
+    ["line_items[0][price_data][product_data][name]", "La Carta · Comandero C1 · de contado"],
+    ["line_items[0][price_data][product_data][description]", "Impresora, rollos, códigos QR y 300 pláticas con Beto. Cubre un año de servicio."],
+    ["metadata[que]", "kit"], ["metadata[compra]", id], ["metadata[vendedor]", vendedor],
+    ["payment_intent_data[metadata][que]", "kit"], ["payment_intent_data[metadata][compra]", id],
+    ["payment_intent_data[description]", "Kit La Carta de contado " + id],
+    ["phone_number_collection[enabled]", "true"],
+    ["customer_update[name]", "auto"],
+    ["custom_fields[0][key]", "negocio"], ["custom_fields[0][type]", "text"],
+    ["custom_fields[0][label][type]", "custom"], ["custom_fields[0][label][custom]", "Nombre de tu negocio"],
+    ["success_url", base + "/comprar?pago=stripe"], ["cancel_url", base + "/comprar?pago=no"],
+    ["payment_method_types[0]", "card"], ["payment_method_types[1]", "oxxo"], ["payment_method_types[2]", "customer_balance"],
+    ["payment_method_options[oxxo][expires_after_days]", "3"],
+    ["payment_method_options[customer_balance][funding_type]", "bank_transfer"],
+    ["payment_method_options[customer_balance][bank_transfer][type]", "mx_bank_transfer"]
+  ];
+  const ses = await stripePide(env, "POST", "/v1/checkout/sessions", p, "kit-" + id);
+  const liga = String(ses.url || "");
+  if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
+  await stripeGuarda(env, "compras/" + id + ".json", { id, que: "kit", monto: KIT_CONTADO, vendedor, fecha: isoMX(), estado: "abierta", sesion: String(ses.id || "") });
+  return { ok: true, tipo: "kit_contado", liga };
+}
+/* EL AVISO DE STRIPE. Contesta 200 si ya quedo (o si no nos importa), 400 si
+   la firma no cuadra, 500 si algo fallo adentro (Stripe reintenta). */
+async function stripeAviso(env, request) {
+  if (!hayStripe(env)) return { status: 503, cuerpo: { ok: false, motivo: "stripe no configurado" } };
+  const crudo = await request.text();
+  if (crudo.length > 262144) return { status: 413, cuerpo: { ok: false } };
+  const bien = await stripeFirmaValida(crudo, request.headers.get("stripe-signature") || "", String(env.STRIPE_FIRMA).trim(), Math.floor(Date.now() / 1e3));
+  if (!bien) return { status: 400, cuerpo: { ok: false, motivo: "firma no valida" } };
+  let ev;
+  try { ev = JSON.parse(crudo); } catch (e) { return { status: 400, cuerpo: { ok: false } }; }
+  const evId = String(ev && ev.id || "");
+  if (!/^evt_[A-Za-z0-9]+$/.test(evId)) return { status: 400, cuerpo: { ok: false } };
+  if ((ev.livemode === true) !== stripeEnVivo(env)) return { status: 200, cuerpo: { ok: true, ignorado: "otro modo" } };
+  if (await env.FOTOS.head("stripe/eventos/" + evId + ".json")) return { status: 200, cuerpo: { ok: true, repetido: true } };
+  let salida;
+  try { salida = await stripeProcesa(env, ev); }
+  catch (e) { return { status: 500, cuerpo: { ok: false, motivo: String(e && e.message || e).slice(0, 120) } }; }
+  await stripeGuarda(env, "stripe/eventos/" + evId + ".json", { tipo: String(ev.type || ""), fecha: isoMX(), salida });
+  return { status: 200, cuerpo: Object.assign({ ok: true }, salida) };
+}
+async function stripeProcesa(env, ev) {
+  const tipo = String(ev.type || "");
+  const o = (ev.data && ev.data.object) || {};
+  const md = o.metadata || {};
+  const prueba = ev.livemode === true ? "" : " <i>(prueba)</i>";
+  if (tipo.indexOf("checkout.session.") === 0 && md.que === "kit") {
+    const id = String(md.compra || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+    const reg = (id && await stripeLee(env, "compras/" + id + ".json")) || { id, que: "kit", monto: KIT_CONTADO, vendedor: String(md.vendedor || "") };
+    const cd = o.customer_details || {};
+    const campo = (Array.isArray(o.custom_fields) ? o.custom_fields : []).find((c) => c && c.key === "negocio");
+    const L = (x, n) => String(x == null ? "" : x).replace(/[<>&]/g, "").slice(0, n);
+    if (campo && campo.text && campo.text.value) reg.negocio = L(campo.text.value, 60);
+    if (cd.name) reg.nombre = L(cd.name, 60);
+    if (cd.phone) reg.telefono = L(cd.phone, 20);
+    if (cd.email) reg.correo = L(cd.email, 80);
+    reg.sesion = String(o.id || reg.sesion || "");
+    reg.pago = typeof o.payment_intent === "string" ? o.payment_intent : String(reg.pago || "");
+    let estado = "";
+    if (tipo === "checkout.session.completed") estado = o.payment_status === "paid" ? "pagado" : "esperando";
+    if (tipo === "checkout.session.async_payment_succeeded") estado = "pagado";
+    if (tipo === "checkout.session.async_payment_failed") estado = "vencio";
+    if (tipo === "checkout.session.expired") estado = "sin_pagar";
+    if (!estado) return { nada: tipo };
+    if (reg.estado === "pagado" && estado !== "pagado") return { compra: id, estado: "pagado" };
+    if (estado === "pagado" && !(Number(o.amount_total) === KIT_CONTADO * 100 && String(o.currency || "").toLowerCase() === "mxn")) estado = "revisar";
+    const yaPagado = reg.estado === "pagado";
+    reg.estado = estado;
+    reg["cuando_" + estado] = isoMX();
+    await stripeGuarda(env, "compras/" + (id || reg.sesion) + ".json", reg);
+    const quien = (reg.negocio || "(sin negocio)") + " — " + (reg.nombre || "?") + "\nTel: " + (reg.telefono || "?") + (reg.vendedor ? "\nVendedor: " + reg.vendedor : "");
+    if (estado === "pagado" && !yaPagado) await avisaEdsiRed(env, "\u{1F4B0} <b>Pagaron un kit de contado: $" + KIT_CONTADO.toLocaleString("en-US") + "</b>" + prueba + "\n" + quien + "\nMándale su caja.");
+    if (estado === "esperando") await avisaEdsiRed(env, "\u{1F9FE} <b>Sacaron ficha para el kit</b> (OXXO o transferencia)" + prueba + "\n" + quien + "\nTodavía no paga. Cuando pague te aviso.");
+    if (estado === "vencio") await avisaEdsiRed(env, "⌛ <b>Venció la ficha del kit sin pagar</b>" + prueba + "\n" + quien);
+    if (estado === "revisar") await avisaEdsiRed(env, "⚠️ <b>Pago de kit con monto raro</b>" + prueba + ": $" + (Number(o.amount_total) / 100) + " " + String(o.currency || "") + "\n" + quien + "\nRevísalo en Stripe antes de mandar la caja.");
+    return { compra: id, estado };
+  }
+  if (tipo === "charge.refunded" || tipo === "charge.dispute.created" || tipo === "charge.dispute.closed") {
+    const que = tipo === "charge.refunded" ? "\u{21A9}️ <b>Se hizo un reembolso</b>" : tipo === "charge.dispute.created" ? "\u{1F6A8} <b>Te abrieron un contracargo</b>" : "\u{1F4CB} <b>Se cerró un contracargo</b>: " + String(o.status || "");
+    await avisaEdsiRed(env, que + prueba + "\nMonto: $" + (Number(o.amount_refunded || o.amount) / 100) + "\nPago: " + String(o.payment_intent || "").replace(/[^A-Za-z0-9_]/g, "") + "\nRevísalo en Stripe.");
+    return { aviso: tipo };
+  }
+  return { nada: tipo };
+}
 /* Paso 1: se guardan los datos y se avisa a Edsi. Devuelve el ID. */
 async function kitSuscribir(env, clave, d) {
   const corta = (t, n) => String(t || "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -36233,6 +36388,7 @@ var ESCRITURAS = {
   recarga: recargarTanque,
   tanque_comprar: tanqueComprar,
   kit_comprar: kitComprar,
+  kit_contado: kitContado,
   kit_suscribir: kitSuscribir,
   kit_enganche: kitEnganche,
   kit_mensual: kitMensual,
@@ -36593,7 +36749,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.25";  // version: "2.9.25"
+var VERSION_BETO = "2.9.26";  // version: "2.9.26"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -37330,6 +37486,9 @@ async function mapaDeKits(env) {
 }
 __name(mapaDeKits, "mapaDeKits");
 
+var STRIPE_CONTADO_HTML = '<div style="margin-top:24px"><label>O de contado, desde aqu&iacute;</label>' +
+  '<button class="plazo" id="bContado"><span class="mes">De contado</span><span class="cuota"><b>$3,700</b><span>tarjeta, OXXO o transferencia</span></span></button>' +
+  '<p class="ay">El cobro lo hace Stripe. Con OXXO o transferencia te da una ficha y tienes 3 d&iacute;as para pagar.</p></div>';
 var HTML_COMPRA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>La Carta &middot; Comandero C1</title>
@@ -37372,6 +37531,7 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
   <span class="cuota"><b>$1,383.33</b><span>al mes &middot; total $4,150</span></span></button>
 <div class="msg" id="m"></div>
 <p class="ay">Solo tarjeta de cr&eacute;dito. El cobro lo hace Mercado Pago, no nosotros.</p>
+<!--STRIPE_CONTADO-->
 <p class="ay" style="margin-top:6px">El pago de contado o a 3 meses cubre <b>un a&ntilde;o</b> de servicio. Cada a&ntilde;o se renueva.</p>
 
 <div id="suscr" style="margin-top:28px">
@@ -37411,6 +37571,21 @@ if (pago === 'suscrito') avisa('<b>Listo, quedaste suscrito.</b> Cada mes se cob
 else if (pago === 'ok') avisa('<b>Listo, tu pago entr&oacute;.</b> Qui&eacute;n te atendi&oacute; ya lo ve. Guarda el correo de Mercado Pago.', true);
 else if (pago === 'pendiente') avisa('Tu pago qued&oacute; en proceso. En cuanto lo aprueben, listo.', true);
 else if (pago === 'no') avisa('No se complet&oacute; el pago. Puedes intentarlo otra vez.');
+else if (pago === 'stripe') avisa('<b>Listo, recibimos tu pedido.</b> Si pagaste con tarjeta, ya entr&oacute;. Si sacaste ficha de OXXO o transferencia, en cuanto pagues nos llega el aviso y te mandamos tu caja.', true);
+/* DE CONTADO POR STRIPE (el boton solo existe si Stripe esta listo). */
+(function(){
+  var b = document.getElementById('bContado');
+  if (!b) return;
+  b.onclick = function(){
+    b.disabled = true; var antes = b.innerHTML; b.innerHTML = '<span class="mes">Abriendo la p&aacute;gina de pago...</span>';
+    fetch('/beto-guarda', { method: 'POST', headers: {'content-type':'application/json'},
+      body: JSON.stringify({ c: 'kit', tipo: 'kit_contado', datos: { vendedor: qs.get('v') || '' } }) })
+    .then(function(r){ return r.json(); }).then(function(r){
+      if (r && r.ok && r.liga) { location.href = r.liga; return; }
+      b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo abrir el pago.');
+    }).catch(function(){ b.disabled = false; b.innerHTML = antes; avisa('No se pudo abrir el pago. Revisa tu se&ntilde;al.'); });
+  };
+})();
 var botones = document.querySelectorAll('.plazo[data-meses]');
 /* LA SUSCRIPCION. Solo el ID viaja en la direccion; los datos se quedan en el servidor. */
 (function(){
@@ -39615,7 +39790,7 @@ await chatAvisar(env, cfg,
     /* EL QR DE PAGO. Va impreso en el papel que trae el vendedor: el cliente
        lo escanea, escoge su plazo y paga con su tarjeta. */
     if (ruta === "/comprar" || ruta === "/comprarla") {
-      return new Response(HTML_COMPRA, {
+      return new Response(HTML_COMPRA.replace("<!--STRIPE_CONTADO-->", hayStripe(env) ? STRIPE_CONTADO_HTML : ""), {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
@@ -41130,6 +41305,11 @@ await chatAvisar(env, cfg,
           "cache-control": "private, max-age=300"
         }
       });
+    }
+    /* Stripe avisa aqui: kit de contado (y luego recargas y suscripcion). */
+    if (ruta === "/stripe-aviso" && request.method === "POST") {
+      const r = await stripeAviso(env, request);
+      return json(r.cuerpo, r.status);
     }
     /* Mercado Pago avisa aqui cuando alguien paga un tanque. */
     if (ruta === "/mp-aviso") {
