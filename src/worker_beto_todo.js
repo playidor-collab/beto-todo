@@ -5435,7 +5435,7 @@ function cablearRecarga(){
       var msg = $("bocaMsgC");
       if (msg) { msg.classList.remove("oculto"); aviso(msg, "Preparando el cobro...", true); }
       bc.disabled = true;
-      pide("/beto-guarda", {c: CLAVE, tipo: "tanque_comprar", datos: {pin: PIN, platicas: Number(bc.getAttribute("data-compra"))}})
+      pide("/beto-guarda", {c: CLAVE, tipo: window.COMPRA_STRIPE ? "tanque_stripe" : "tanque_comprar", datos: {pin: PIN, platicas: Number(bc.getAttribute("data-compra"))}})
         .then(function(rr){
           bc.disabled = false;
           if (!rr || !rr.ok || !rr.liga) { if (msg) aviso(msg, (rr && rr.error) ? rr.error : "No se pudo."); return; }
@@ -5489,9 +5489,11 @@ function pintaBoca(){
     /* Comprar sale solo si Edsi ya puso su llave de Mercado Pago. Sin ella no
        se ensena una puerta que no abre. */
     var compra = "";
-    if (ch.mp && ch.tanques && ch.tanques.length) {
+    if ((ch.stripe || ch.mp) && ch.tanques && ch.tanques.length) {
       compra = '<div class="ay" style="margin-top:10px"><b>Comprar un tanque</b><br>' +
-        'Se paga con tarjeta o en OXXO por Mercado Pago, y se te carga solo en cuanto pagues.</div>';
+        (ch.stripe ? 'Se paga con tarjeta, en OXXO o por transferencia, y se te carga solo en cuanto pagues.'
+                   : 'Se paga con tarjeta o en OXXO por Mercado Pago, y se te carga solo en cuanto pagues.') + '</div>';
+      window.COMPRA_STRIPE = !!ch.stripe;
       ch.tanques.forEach(function(t){
         compra += '<button class="btn" data-compra="' + t.platicas + '">' +
           t.platicas + ' pl\u00e1ticas \u00b7 $' + t.precio + '</button>';
@@ -35617,6 +35619,81 @@ async function stripeLee(env, llave) {
   if (!o) return null;
   try { return JSON.parse(await o.text()); } catch (e) { return null; }
 }
+/* Para que negocio sale Stripe. En prueba, solo en el negocio de prueba. */
+var STRIPE_NEGOCIOS_PRUEBA = ["buentaco"];
+function stripeParaNegocio(env, clave) {
+  return hayStripe(env) && (stripeEnVivo(env) || STRIPE_NEGOCIOS_PRUEBA.indexOf(String(clave || "").toLowerCase()) > -1);
+}
+/* Un cliente de Stripe por negocio: la transferencia le da siempre la misma CLABE. */
+async function stripeClienteNegocio(env, cual, negocio) {
+  const llave = "stripe/clientes/" + cual + ".json";
+  const ya = await stripeLee(env, llave);
+  if (ya && /^cus_/.test(String(ya.id || ""))) return ya.id;
+  const c = await stripePide(env, "POST", "/v1/customers",
+    [["description", "Negocio " + negocio + " (" + cual + ")"], ["name", negocio.slice(0, 60)], ["metadata[clave]", cual]], "neg-" + cual);
+  if (!/^cus_/.test(String(c.id || ""))) throw new Error("Stripe no abrió la cuenta del negocio");
+  await stripeGuarda(env, llave, { id: c.id, fecha: isoMX() });
+  return c.id;
+}
+async function tanqueStripe(env, clave, d) {
+  const cual = String(d.clave || clave || "").trim().toLowerCase();
+  const permiso = await revisarPin(env, cual, d.pin);
+  if (!permiso.ok || permiso.rol !== "dueno") throw new Error("hace falta el NIP del dueño");
+  if (!stripeParaNegocio(env, cual)) throw new Error("todavía no se puede pagar así; usa el otro botón o pídele un código a quien te lo instaló");
+  const t = tanqueDe(d.platicas || (TANQUES[0] && TANQUES[0].platicas));
+  if (!t) throw new Error("ese tanque no existe");
+  const cfg = await traerConfig(env, cual);
+  if (!cfg || !cfg.clave) throw new Error("no encontré ese negocio");
+  const negocio = String(leerBlob(cfg).negocio || cual);
+  const base = origenPublico(cual, String(d.__origen || ""));
+  const cliente = await stripeClienteNegocio(env, cual, negocio);
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const ses = await stripePide(env, "POST", "/v1/checkout/sessions", [
+    ["mode", "payment"], ["customer", cliente], ["client_reference_id", cual], ["locale", "es-419"],
+    ["line_items[0][quantity]", "1"],
+    ["line_items[0][price_data][currency]", "mxn"],
+    ["line_items[0][price_data][unit_amount]", String(t.precio * 100)],
+    ["line_items[0][price_data][product_data][name]", "Recarga Beto · " + t.platicas + " pláticas"],
+    ["line_items[0][price_data][product_data][description]", "Pláticas de Beto para " + negocio + ". No se vencen."],
+    ["metadata[que]", "tanque"], ["metadata[clave]", cual], ["metadata[platicas]", String(t.platicas)],
+    ["payment_intent_data[metadata][que]", "tanque"], ["payment_intent_data[metadata][clave]", cual],
+    ["payment_intent_data[description]", "Recarga Beto " + cual + " " + t.platicas],
+    ["success_url", base + "/panel?pago=ok#pBeto"], ["cancel_url", base + "/panel?pago=no#pBeto"],
+    ["payment_method_types[0]", "card"], ["payment_method_types[1]", "oxxo"], ["payment_method_types[2]", "customer_balance"],
+    ["payment_method_options[oxxo][expires_after_days]", "3"],
+    ["payment_method_options[customer_balance][funding_type]", "bank_transfer"],
+    ["payment_method_options[customer_balance][bank_transfer][type]", "mx_bank_transfer"]
+  ], "tanque-" + cual + "-" + id);
+  const liga = String(ses.url || "");
+  if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
+  return { ok: true, tipo: "tanque_stripe", liga, platicas: t.platicas, precio: t.precio };
+}
+/* La carga, una sola vez por sesion de pago (codigo ST<sesion>). */
+async function stripeCargaTanque(env, o, prueba) {
+  const md = o.metadata || {};
+  const cual = String(md.clave || o.client_reference_id || "").trim().toLowerCase();
+  const t = tanqueDe(md.platicas);
+  if (!/^[a-z0-9]{3,20}$/.test(cual) || !t) {
+    await avisaEdsiRed(env, "⚠️ <b>Recarga por Stripe con datos raros</b>" + prueba + "\nRevísala en Stripe.");
+    return { tanque: "referencia_rara" };
+  }
+  if (!(Number(o.amount_total) === t.precio * 100 && String(o.currency || "").toLowerCase() === "mxn")) {
+    await avisaEdsiRed(env, "⚠️ <b>Recarga de " + cual + " con monto raro</b>" + prueba + ": $" + (Number(o.amount_total) / 100) + "\nNo la cargué. Revísala en Stripe.");
+    return { tanque: "monto_raro" };
+  }
+  const codigo = "ST" + String(o.id || "").replace(/[^A-Za-z0-9]/g, "").slice(-40);
+  const ya = await traerCon(env, TABLA_RECARGAS, [{ columnName: "codigo", condition: "eq", value: codigo }]);
+  if (ya.length) return { tanque: "ya_cargado", clave: cual };
+  await insertarFilas(env, TABLA_RECARGAS, [{ codigo, platicas: t.platicas, usado: "1", clave: cual, cuando: diaDeHoyMX(), lote: "stripe" }]);
+  const cfg = await traerConfig(env, cual);
+  const blob = leerBlob(cfg);
+  const g = chatGuardado(blob);
+  const saldo = Math.max(0, Math.min(1e6, g.saldo + t.platicas));
+  await chatGuardar(env, cual, blob, { mes: g.mes, cuota: g.cuota, saldo, ses: g.ses, abierto: true, aviso: "" });
+  try { await chatAvisar(env, cfg, "✅ <b>Se cargó tu tanque</b>: " + t.platicas + " pláticas más con Beto.\nYa tienes " + saldo + ". No se vencen."); } catch (e) {}
+  try { await avisaEdsiRed(env, "\u{1F50B} <b>Recarga pagada por Stripe</b>" + prueba + ": " + cual + " · " + t.platicas + " pláticas · $" + t.precio); } catch (e) {}
+  return { tanque: "cargado", clave: cual, platicas: t.platicas, saldo };
+}
 /* EL KIT DE CONTADO. Lo pide un desconocido desde la calle: no prende nada. */
 async function kitContado(env, clave, d) {
   if (!hayStripe(env)) throw new Error("todavía no se puede pagar así; paga en efectivo con quien te atendió");
@@ -35677,6 +35754,11 @@ async function stripeProcesa(env, ev) {
   const o = (ev.data && ev.data.object) || {};
   const md = o.metadata || {};
   const prueba = ev.livemode === true ? "" : " <i>(prueba)</i>";
+  if (tipo.indexOf("checkout.session.") === 0 && md.que === "tanque") {
+    const pagado = (tipo === "checkout.session.completed" && o.payment_status === "paid") || tipo === "checkout.session.async_payment_succeeded";
+    if (!pagado) return { tanque: "sin_pagar_aun", evento: tipo };
+    return await stripeCargaTanque(env, o, prueba);
+  }
   if (tipo.indexOf("checkout.session.") === 0 && md.que === "kit") {
     const id = String(md.compra || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
     const reg = (id && await stripeLee(env, "compras/" + id + ".json")) || { id, que: "kit", monto: KIT_CONTADO, vendedor: String(md.vendedor || "") };
@@ -36387,6 +36469,7 @@ var ESCRITURAS = {
   chat_tanque: chatTanque,
   recarga: recargarTanque,
   tanque_comprar: tanqueComprar,
+  tanque_stripe: tanqueStripe,
   kit_comprar: kitComprar,
   kit_contado: kitContado,
   kit_suscribir: kitSuscribir,
@@ -36749,7 +36832,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.27";  // version: "2.9.27"
+var VERSION_BETO = "2.9.28";  // version: "2.9.28"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -41068,6 +41151,7 @@ await chatAvisar(env, cfg,
             /* Si el boton de comprar sale, y con que. No es secreto: es el
                precio de lista. */
             mp: hayMercadoPago(env),
+            stripe: stripeParaNegocio(env, clave),
             tanques: TANQUES
           }),
           /* COMO IMPRIME ESTE NEGOCIO. La cocina, el TPV y la caja lo
