@@ -35694,6 +35694,101 @@ async function stripeCargaTanque(env, o, prueba) {
   try { await avisaEdsiRed(env, "\u{1F50B} <b>Recarga pagada por Stripe</b>" + prueba + ": " + cual + " · " + t.platicas + " pláticas · $" + t.precio); } catch (e) {}
   return { tanque: "cargado", clave: cual, platicas: t.platicas, saldo };
 }
+/* LA SUSCRIPCION POR STRIPE. Una sola pagina: enganche hoy, $400 cada mes
+   desde dentro de 30 dias. Solo tarjeta (OXXO no sirve para cobros que se
+   repiten solos). */
+async function kitSuscribirStripe(env, clave, d) {
+  if (!hayStripe(env)) throw new Error("todavía no se puede pagar así");
+  const reg = await leeSuscripcion(env, d.id);
+  if (reg.stripe_sub) throw new Error("esa suscripción ya está activa");
+  const efectivo = !!(d && d.efectivo);
+  const base = origenPublico("", String(d && d.__origen || ""));
+  const cli = await stripePide(env, "POST", "/v1/customers", [
+    ["description", "Suscripción La Carta · " + reg.negocio], ["name", String(reg.dueno || "").slice(0, 60)],
+    ["email", reg.correo], ["phone", reg.telefono], ["metadata[suscripcion]", reg.id], ["metadata[negocio]", reg.negocio.slice(0, 60)]
+  ], "sus-cli-" + reg.id);
+  if (!/^cus_/.test(String(cli.id || ""))) throw new Error("Stripe no abrió la cuenta del cliente");
+  const p = [
+    ["mode", "subscription"], ["customer", cli.id], ["client_reference_id", reg.id], ["locale", "es-419"],
+    ["line_items[0][quantity]", "1"],
+    ["line_items[0][price_data][currency]", "mxn"],
+    ["line_items[0][price_data][unit_amount]", String(SUSCRIPCION.mensual * 100)],
+    ["line_items[0][price_data][recurring][interval]", "month"],
+    ["line_items[0][price_data][product_data][name]", "La Carta · Comandero C1 · mensualidad"],
+    ["subscription_data[trial_period_days]", "30"],
+    ["subscription_data[metadata][que]", "suscripcion"], ["subscription_data[metadata][suscripcion]", reg.id],
+    ["subscription_data[description]", ("La Carta C1 · $" + SUSCRIPCION.mensual + "/mes · " + reg.negocio).slice(0, 120)],
+    ["metadata[que]", "suscripcion"], ["metadata[suscripcion]", reg.id], ["metadata[efectivo]", efectivo ? "1" : "0"],
+    ["payment_method_types[0]", "card"],
+    ["success_url", base + "/comprar?pago=suscrito"], ["cancel_url", base + "/comprar?pago=no"]
+  ];
+  if (!efectivo) {
+    p.push(["line_items[1][quantity]", "1"],
+      ["line_items[1][price_data][currency]", "mxn"],
+      ["line_items[1][price_data][unit_amount]", String(SUSCRIPCION.enganche * 100)],
+      ["line_items[1][price_data][product_data][name]", "La Carta · Comandero C1 · enganche"]);
+  }
+  const ses = await stripePide(env, "POST", "/v1/checkout/sessions", p, "sus-" + reg.id + "-" + (efectivo ? "e" : "t") + "-" + Math.floor(Date.now() / 6e4));
+  const liga = String(ses.url || "");
+  if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
+  reg.estado = "stripe_abierto"; reg.enganche = efectivo ? "efectivo" : "stripe";
+  await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
+  if (efectivo) await avisaEdsiRed(env, "\u{1F4B3} <b>" + reg.negocio + "</b> va a activar su pago de $" + SUSCRIPCION.mensual + " al mes con Stripe.\n⚠️ Dijo que el ENGANCHE lo pagó EN EFECTIVO con el vendedor " + (reg.vendedor || "") + ". Confírmalo.");
+  return { ok: true, tipo: "kit_suscribir_stripe", liga };
+}
+/* De que suscripcion es un aviso de Stripe. */
+async function stripeRegDeSub(env, sub) {
+  const s = String(sub || "").replace(/[^A-Za-z0-9_]/g, "");
+  if (!s) return null;
+  const idx = await stripeLee(env, "stripe/subs/" + s + ".json");
+  if (!idx || !idx.id) return null;
+  const reg = await stripeLee(env, "suscripciones/" + String(idx.id).replace(/[^a-z0-9]/g, "") + ".json");
+  return reg;
+}
+async function stripeSuscripcionAviso(env, tipo, o, prueba) {
+  if (tipo === "checkout.session.completed") {
+    const md = o.metadata || {};
+    const reg = await stripeLee(env, "suscripciones/" + String(md.suscripcion || "").replace(/[^a-z0-9]/g, "").slice(0, 20) + ".json");
+    const sub = String(typeof o.subscription === "string" ? o.subscription : (o.subscription && o.subscription.id) || "");
+    if (!reg || !sub) { await avisaEdsiRed(env, "⚠️ <b>Suscripción por Stripe que no encuentro</b>" + prueba + "\nRevísala en Stripe."); return { suscripcion: "no_encontrada" }; }
+    reg.estado = "mensual_activo"; reg.stripe_sub = sub; reg.stripe_estado = "trialing"; reg.stripe_inicio = isoMX();
+    await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
+    await stripeGuarda(env, "stripe/subs/" + sub + ".json", { id: reg.id });
+    await avisaEdsiRed(env, "✅ <b>Suscripción nueva por Stripe</b>" + prueba + "\n" + reg.negocio + " — " + reg.dueno + "\nTel: " + reg.telefono +
+      (reg.vendedor ? "\nVendedor: " + reg.vendedor : "") + "\nEnganche: " + (md.efectivo === "1" ? "EN EFECTIVO (confírmalo)" : "$" + SUSCRIPCION.enganche + " pagado con tarjeta") +
+      "\n$" + SUSCRIPCION.mensual + " al mes a partir de dentro de 30 días.\nDalo de alta en /socio con ese mismo teléfono.");
+    return { suscripcion: "activa", id: reg.id };
+  }
+  if (tipo === "invoice.paid" || tipo === "invoice.payment_failed") {
+    const sub = o.subscription || (o.parent && o.parent.subscription_details && o.parent.subscription_details.subscription) || "";
+    const reg = await stripeRegDeSub(env, typeof sub === "string" ? sub : sub && sub.id);
+    if (!reg) return { suscripcion: "factura_sin_registro" };
+    const monto = Number(tipo === "invoice.paid" ? o.amount_paid : o.amount_due) / 100 || 0;
+    if (tipo === "invoice.paid") {
+      if (monto > 0) { reg.stripe_ultimo_pago = isoMX(); reg.stripe_ultimo_ms = Date.now(); }
+      if (reg.stripe_estado === "past_due" || reg.stripe_estado === "unpaid") reg.stripe_estado = "active";
+      await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
+      if (monto > 0) await avisaEdsiRed(env, "\u{1F4B3} <b>Cobro de suscripción</b>" + prueba + ": $" + monto.toLocaleString("en-US") + " de " + reg.negocio + ".");
+      return { suscripcion: "cobro", monto };
+    }
+    reg.stripe_fallo = isoMX();
+    await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
+    await avisaEdsiRed(env, "❌ <b>No se pudo cobrar la suscripción</b>" + prueba + " de " + reg.negocio + " ($" + monto + ")\nTel: " + reg.telefono + "\nStripe lo va a reintentar. Si en 35 días no paga, se pausa solo.");
+    return { suscripcion: "cobro_fallido" };
+  }
+  if (tipo === "customer.subscription.updated" || tipo === "customer.subscription.deleted") {
+    const reg = await stripeRegDeSub(env, o.id);
+    if (!reg) return { suscripcion: "sin_registro" };
+    const antes = reg.stripe_estado;
+    reg.stripe_estado = tipo === "customer.subscription.deleted" ? "canceled" : String(o.status || "");
+    await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
+    if (reg.stripe_estado !== antes && /^(canceled|unpaid|past_due)$/.test(reg.stripe_estado)) {
+      await avisaEdsiRed(env, "⚠️ <b>" + reg.negocio + "</b>: su suscripción de Stripe quedó en <b>" + reg.stripe_estado + "</b>" + prueba + ".");
+    }
+    return { suscripcion: reg.stripe_estado };
+  }
+  return { nada: tipo };
+}
 /* EL KIT DE CONTADO. Lo pide un desconocido desde la calle: no prende nada. */
 async function kitContado(env, clave, d) {
   if (!hayStripe(env)) throw new Error("todavía no se puede pagar así; paga en efectivo con quien te atendió");
@@ -35754,6 +35849,10 @@ async function stripeProcesa(env, ev) {
   const o = (ev.data && ev.data.object) || {};
   const md = o.metadata || {};
   const prueba = ev.livemode === true ? "" : " <i>(prueba)</i>";
+  if ((tipo === "checkout.session.completed" && md.que === "suscripcion") || tipo === "invoice.paid" || tipo === "invoice.payment_failed" ||
+      tipo === "customer.subscription.updated" || tipo === "customer.subscription.deleted") {
+    return await stripeSuscripcionAviso(env, tipo, o, prueba);
+  }
   if (tipo.indexOf("checkout.session.") === 0 && md.que === "tanque") {
     const pagado = (tipo === "checkout.session.completed" && o.payment_status === "paid") || tipo === "checkout.session.async_payment_succeeded";
     if (!pagado) return { tanque: "sin_pagar_aun", evento: tipo };
@@ -35872,7 +35971,7 @@ async function kitMensual(env, clave, d) {
 var ATRASO_MAX_DIAS = 35;
 async function revisarSuscripciones(env, soloVer) {
   const informe = [];
-  if (!hayMercadoPago(env)) return { ok: false, error: "sin llave de Mercado Pago", informe };
+  if (!hayMercadoPago(env) && !hayStripe(env)) return { ok: false, error: "sin llave de Mercado Pago ni de Stripe", informe };
   const regs = [];
   let cursor;
   for (let v = 0; v < 5; v++) {
@@ -35888,23 +35987,35 @@ async function revisarSuscripciones(env, soloVer) {
   try { clientes = await traerCon(env, TABLA_CLIENTES, []); } catch (e) { return { ok: false, error: "no pude leer la tabla de clientes", informe }; }
   const ahora = Date.now();
   for (const reg of regs) {
-    if (!reg.preapproval) continue;
+    if (!reg.preapproval && !reg.stripe_sub) continue;
     const renglon = { id: reg.id, negocio: reg.negocio };
+    let st = "", pendientes = 0, debePausar = false, alCorriente = false;
+    if (reg.stripe_sub) {
+      /* STRIPE: con lo que ya llego por los avisos. */
+      st = String(reg.stripe_estado || "");
+      const desdeS = Number(reg.stripe_ultimo_ms || 0) || Date.parse(reg.stripe_inicio || reg.fecha || "") || ahora;
+      const diasS = (ahora - desdeS) / 864e5;
+      debePausar = st === "canceled" || st === "unpaid" || st === "incomplete_expired" || (st === "past_due" && diasS > ATRASO_MAX_DIAS);
+      alCorriente = st === "active" || st === "trialing";
+      pendientes = st === "past_due" ? 1 : 0;
+      renglon.stripe = st;
+    } else {
     let pre = null;
     try {
       const r = await fetch(MP_API + "/preapproval/" + encodeURIComponent(reg.preapproval), { headers: { authorization: "Bearer " + String(env.MP_TOKEN).trim() } });
       if (r.ok) pre = await r.json();
     } catch (e) { pre = null; }
     if (!pre) { renglon.que = "mercado pago no contestó; no se toca"; informe.push(renglon); continue; }
-    const st = String(pre.status || "");
+    st = String(pre.status || "");
     const sum = pre.summarized || {};
-    const pendientes = Number(sum.pending_charge_quantity || 0);
+    pendientes = Number(sum.pending_charge_quantity || 0);
     const semaforo = String(sum.semaphore || "");
     const desde = Date.parse(sum.last_charged_date || (pre.auto_recurring && pre.auto_recurring.start_date) || "") || ahora;
     const dias = (ahora - desde) / 864e5;
-    const debePausar = st === "paused" || st === "cancelled" || semaforo === "red" || (pendientes > 0 && dias > ATRASO_MAX_DIAS);
-    const alCorriente = st === "authorized" && pendientes === 0 && semaforo !== "red";
+    debePausar = st === "paused" || st === "cancelled" || semaforo === "red" || (pendientes > 0 && dias > ATRASO_MAX_DIAS);
+    alCorriente = st === "authorized" && pendientes === 0 && semaforo !== "red";
     renglon.mp = st; renglon.pendientes = pendientes;
+    }
     // El negocio, por telefono.
     const tel = soloNumeros(reg.telefono).slice(-10);
     const cli = clientes.find((c) => tel.length === 10 && soloNumeros(c.telefono).slice(-10) === tel &&
@@ -35931,7 +36042,7 @@ async function revisarSuscripciones(env, soloVer) {
         await actualizarFilas(env, TABLA_CLIENTES, [{ columnName: "id", condition: "eq", value: cli.id }],
           { estado: "pausado", notas: (notas ? notas + " " : "") + "AUTOPAUSA" });
         PAUSA_MEMORIA.delete(String(cli.clave).toLowerCase());
-        await avisaEdsiRed(env, "⏸️ Pausé a <b>" + reg.negocio + "</b> (" + cli.clave + "): Mercado Pago dice " + st +
+        await avisaEdsiRed(env, "⏸️ Pausé a <b>" + reg.negocio + "</b> (" + cli.clave + "): " + (reg.stripe_sub ? "Stripe" : "Mercado Pago") + " dice " + st +
           (pendientes ? ", " + pendientes + " cobro(s) sin pagar" : "") + ". Se reactiva solo cuando pague.");
       }
     } else if (estado === "pausado" && /\bAUTOPAUSA\b/.test(notas) && alCorriente) {
@@ -36475,6 +36586,7 @@ var ESCRITURAS = {
   kit_suscribir: kitSuscribir,
   kit_enganche: kitEnganche,
   kit_mensual: kitMensual,
+  kit_suscribir_stripe: kitSuscribirStripe,
   suscripciones_revisar: suscripcionesRevisar,
   recargas_nuevas: recargasNuevas,
   promotor_cobro: promotorCobro,
@@ -36832,7 +36944,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.28";  // version: "2.9.28"
+var VERSION_BETO = "2.9.29";  // version: "2.9.29"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -37678,6 +37790,11 @@ var botones = document.querySelectorAll('.plazo[data-meses]');
       body: JSON.stringify({ c: 'kit', tipo: tipo, datos: datos }) }).then(function(r){ return r.json(); });
   }
   var idS = qs.get('r') || '';
+  /* Con Stripe listo, la suscripcion va completa por Stripe (solo tarjeta). */
+  var SUS_STRIPE = !!document.getElementById('bContado');
+  if (SUS_STRIPE) {
+    var sp = document.querySelector('#sEng .cuota span'); if (sp) sp.textContent = 'y $400 al mes, con tarjeta';
+  }
   if (qs.get('paso') === 'mensual' && idS) {
     $s('sDatos').style.display = 'none'; $s('sMes').style.display = 'block';
     $s('suscr').scrollIntoView();
@@ -37685,8 +37802,8 @@ var botones = document.querySelectorAll('.plazo[data-meses]');
     else avisa('<b>Tu enganche entr&oacute;.</b> Falta un paso: activa tu pago mensual.', true);
   }
   function mensual(efectivo, b){
-    b.disabled = true; var antes = b.innerHTML; b.innerHTML = '<span class="mes">Abriendo Mercado Pago...</span>';
-    pideS('kit_mensual', { id: idS, efectivo: efectivo ? 1 : 0 }).then(function(r){
+    b.disabled = true; var antes = b.innerHTML; b.innerHTML = '<span class="mes">Abriendo la p&aacute;gina de pago...</span>';
+    pideS(SUS_STRIPE ? 'kit_suscribir_stripe' : 'kit_mensual', { id: idS, efectivo: efectivo ? 1 : 0 }).then(function(r){
       if (r && r.ok && r.liga) { location.href = r.liga; return; }
       b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo abrir el pago.');
     }).catch(function(){ b.disabled = false; b.innerHTML = antes; avisa('No se pudo abrir el pago. Revisa tu se&ntilde;al.'); });
@@ -37701,7 +37818,7 @@ var botones = document.querySelectorAll('.plazo[data-meses]');
   }
   $s('sEng').onclick = function(){
     datos(function(b, antes){
-      pideS('kit_enganche', { id: idS }).then(function(r){
+      pideS(SUS_STRIPE ? 'kit_suscribir_stripe' : 'kit_enganche', { id: idS }).then(function(r){
         if (r && r.ok && r.liga) { location.href = r.liga; return; }
         b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo abrir el pago.');
       });
