@@ -5492,7 +5492,7 @@ function pintaBoca(){
     if ((ch.stripe || ch.mp) && ch.tanques && ch.tanques.length) {
       compra = '<div class="ay" style="margin-top:10px"><b>Comprar un tanque</b><br>' +
         (ch.stripe ? 'Se paga con tarjeta, en OXXO o por transferencia, y se te carga solo en cuanto pagues.'
-                   : 'Se paga con tarjeta o en OXXO por Mercado Pago, y se te carga solo en cuanto pagues.') + '</div>';
+                   : 'Se paga con tarjeta o en OXXO por Mercado Pago, y se te carga solo en cuanto pagues.') + ' Por ahora no emitimos factura.</div>';
       window.COMPRA_STRIPE = !!ch.stripe;
       ch.tanques.forEach(function(t){
         compra += '<button class="btn" data-compra="' + t.platicas + '">' +
@@ -35672,7 +35672,7 @@ async function tanqueStripe(env, clave, d) {
     ["line_items[0][price_data][currency]", "mxn"],
     ["line_items[0][price_data][unit_amount]", String(t.precio * 100)],
     ["line_items[0][price_data][product_data][name]", "Recarga Beto · " + t.platicas + " pláticas"],
-    ["line_items[0][price_data][product_data][description]", "Pláticas de Beto para " + negocio + ". No se vencen."],
+    ["line_items[0][price_data][product_data][description]", "Pláticas de Beto para " + negocio + ". No se vencen. Por ahora no emitimos factura."],
     ["metadata[que]", "tanque"], ["metadata[clave]", cual], ["metadata[platicas]", String(t.platicas)],
     ["payment_intent_data[metadata][que]", "tanque"], ["payment_intent_data[metadata][clave]", cual],
     ["payment_intent_data[description]", "Recarga Beto " + cual + " " + t.platicas],
@@ -35733,6 +35733,7 @@ async function kitSuscribirStripe(env, clave, d) {
     ["line_items[0][price_data][unit_amount]", String(SUSCRIPCION.mensual * 100)],
     ["line_items[0][price_data][recurring][interval]", "month"],
     ["line_items[0][price_data][product_data][name]", "La Carta · Comandero C1 · mensualidad"],
+    ["line_items[0][price_data][product_data][description]", "Servicio de La Carta y Beto, cada mes. Por ahora no emitimos factura."],
     ["subscription_data[trial_period_days]", "30"],
     ["subscription_data[metadata][que]", "suscripcion"], ["subscription_data[metadata][suscripcion]", reg.id],
     ["subscription_data[description]", ("La Carta C1 · $" + SUSCRIPCION.mensual + "/mes · " + reg.negocio).slice(0, 120)],
@@ -35744,7 +35745,8 @@ async function kitSuscribirStripe(env, clave, d) {
     p.push(["line_items[1][quantity]", "1"],
       ["line_items[1][price_data][currency]", "mxn"],
       ["line_items[1][price_data][unit_amount]", String(SUSCRIPCION.enganche * 100)],
-      ["line_items[1][price_data][product_data][name]", "La Carta · Comandero C1 · enganche"]);
+      ["line_items[1][price_data][product_data][name]", "La Carta · Comandero C1 · enganche"],
+      ["line_items[1][price_data][product_data][description]", "Impresora, rollos, códigos QR y 300 pláticas con Beto. Por ahora no emitimos factura."]);
   }
   const ses = await stripePide(env, "POST", "/v1/checkout/sessions", p, "sus-" + reg.id + "-" + (efectivo ? "e" : "t") + "-" + Math.floor(Date.now() / 6e4));
   const liga = String(ses.url || "");
@@ -35822,7 +35824,7 @@ async function kitContado(env, clave, d) {
     ["line_items[0][price_data][currency]", "mxn"],
     ["line_items[0][price_data][unit_amount]", String(KIT_CONTADO * 100)],
     ["line_items[0][price_data][product_data][name]", "La Carta · Comandero C1 · de contado"],
-    ["line_items[0][price_data][product_data][description]", "Impresora, rollos, códigos QR y 300 pláticas con Beto. Cubre un año de servicio."],
+    ["line_items[0][price_data][product_data][description]", "Impresora, rollos, códigos QR y 300 pláticas con Beto. Cubre un año de servicio. Por ahora no emitimos factura."],
     ["metadata[que]", "kit"], ["metadata[compra]", id], ["metadata[vendedor]", vendedor],
     ["payment_intent_data[metadata][que]", "kit"], ["payment_intent_data[metadata][compra]", id],
     ["payment_intent_data[description]", "Kit La Carta de contado " + id],
@@ -36962,7 +36964,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.30";  // version: "2.9.30"
+var VERSION_BETO = "2.9.31";  // version: "2.9.31"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -37701,7 +37703,7 @@ __name(mapaDeKits, "mapaDeKits");
 
 var STRIPE_CONTADO_HTML = '<div style="margin-top:24px"><label>O de contado, desde aqu&iacute;</label>' +
   '<button class="plazo" id="bContado"><span class="mes">De contado</span><span class="cuota"><b>$3,700</b><span>tarjeta, OXXO o transferencia</span></span></button>' +
-  '<p class="ay">El cobro lo hace Stripe. Con OXXO o transferencia te da una ficha y tienes 3 d&iacute;as para pagar.</p></div>';
+  '<p class="ay">El cobro lo hace Stripe. Con OXXO o transferencia te da una ficha y tienes 3 d&iacute;as para pagar. Por ahora no emitimos factura.</p></div>';
 var HTML_COMPRA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>La Carta &middot; Comandero C1</title>
@@ -37738,6 +37740,7 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 
 <h1>P&aacute;galo con tu tarjeta,<br>a meses sin intereses.</h1>
 <p class="baja">De contado son <b>$3,700</b> en efectivo, con quien te lo ense&ntilde;&oacute;. Con tarjeta de cr&eacute;dito:</p>
+<p class="ay" style="margin:-8px 0 16px">Por ahora no emitimos factura.</p>
 
 <label>A 3 meses sin intereses</label>
 <button class="plazo" data-meses="3"><span class="mes">3 meses</span>
