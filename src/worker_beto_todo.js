@@ -37032,7 +37032,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.35";  // version: "2.9.35"
+var VERSION_BETO = "2.9.36";  // version: "2.9.36"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -37780,6 +37780,10 @@ var HTML_PORTADA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta property="og:description" content="Sus clientes piden desde su celular y la comanda sale impresa sola en su cocina. Sin computadora.">
 <meta property="og:url" content="https://lacartamenu.com/">
 <meta property="og:type" content="website">
+<meta property="og:image" content="https://lacartamenu.com/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;background:#0e1113;color:#f2f4f6;font-family:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
@@ -37983,6 +37987,12 @@ var HTML_PREGUNTA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>La Carta &middot; Preg&uacute;nteme</title>
 <meta name="description" content="Preg&uacute;ntele lo que quiera a La Carta: precios, qu&eacute; trae la caja y c&oacute;mo funciona.">
+<meta property="og:title" content="La Carta &middot; Preg&uacute;ntenos lo que quiera">
+<meta property="og:url" content="https://lacartamenu.com/pregunta">
+<meta property="og:image" content="https://lacartamenu.com/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;background:#0e1113;color:#f2f4f6;font-family:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
@@ -41343,6 +41353,11 @@ await chatAvisar(env, cfg,
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
+    }
+    if (ruta === "/og.jpg") {
+      const o = env.FOTOS ? await env.FOTOS.get("web/og.jpg") : null;
+      if (!o) return new Response("sin imagen", { status: 404 });
+      return new Response(o.body, { status: 200, headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=86400" } });
     }
     if (ruta === "/") {
       return new Response(HTML_PORTADA.replace("{{WA}}", whatsCasa(env)), {
