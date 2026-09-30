@@ -36440,6 +36440,73 @@ async function soportePregunta(env, clave, d) {
     "\n\n<i>Contéstale RESPONDIENDO a este mensaje. Tu respuesta le llega y queda aprendida.</i>");
   return { ok: true, tipo: "soporte_pregunta", pendiente: reg.id };
 }
+/* LOS INTERESADOS QUE LLEGAN DEL ANUNCIO (lacartamenu.com/pregunta). */
+var PROSPECTO_TOPE_PLATICA = 30;
+var PROSPECTO_TOPE_DIA = 600;
+var ORDEN_PROSPECTO = "Eres el asistente de La Carta (Comandero C1) en lacartamenu.com. Te escribe el DUEÑO de un negocio de comida que vio un anuncio. " +
+  "Háblale de usted, en español sencillo de México, corto (máximo 3 renglones), amable y sin presionar, en texto plano (sin asteriscos ni #). " +
+  "Contesta SOLO con los HECHOS de abajo. Los hechos están escritos para un vendedor: tradúcelos para el dueño y NUNCA repitas instrucciones internas (como 'no des descuentos', 'no lo prometas', 'ofrécele'). " +
+  "Si lo que pregunta no está en los hechos, no lo inventes: dile que eso se lo confirma Edsi, el dueño de La Carta, y pon no_se en true. " +
+  "Tu objetivo: resolver sus dudas y, sin prisa, averiguar qué tipo de negocio tiene y en qué colonia y ciudad está. Una pregunta a la vez, y solo cuando venga al caso. " +
+  "Cuando dé su colonia, dile que alguien de La Carta puede pasar a enseñárselo funcionando, sin compromiso. " +
+  "Responde SOLO un objeto JSON con esta forma: {\"respuesta\":\"...\",\"no_se\":false,\"negocio\":\"\",\"colonia\":\"\",\"nombre\":\"\",\"telefono\":\"\"}. " +
+  "En negocio, colonia, nombre y telefono pon lo que el cliente haya dicho en TODA la plática, o vacío si no lo dijo.";
+async function prospectoCharla(env, clave, d) {
+  const L = (x, n) => String(x == null ? "" : x).replace(/[<>&]/g, "").replace(/\s+/g, " ").trim().slice(0, n);
+  const ses = String(d && d.sesion || "").replace(/[^a-z0-9]/g, "").slice(0, 24);
+  if (ses.length < 8) throw new Error("recargue la página, por favor");
+  const plat = (Array.isArray(d.mensajes) ? d.mensajes : []).slice(-10)
+    .map((m) => ({ role: m && m.de === "yo" ? "user" : "assistant", content: L(m && m.t, 500) })).filter((m) => m.content);
+  if (!plat.length || plat[plat.length - 1].role !== "user") throw new Error("escriba su pregunta");
+  const pregunta = plat[plat.length - 1].content;
+  const llave = "prospectos/" + ses + ".json";
+  const reg = (await stripeLee(env, llave)) || { sesion: ses, fecha: isoMX(), tipo: L(d.tipo, 20), mensajes: 0, preguntas: [] };
+  if (reg.mensajes >= PROSPECTO_TOPE_PLATICA) {
+    return { ok: true, tipo: "prospecto_charla", respuesta: "Ya platicamos bastante por aquí. Para seguir, escríbame por WhatsApp con el botón de abajo y le contesta Edsi.", whatsapp: true };
+  }
+  const dia = isoMX().slice(0, 10);
+  const cuenta = (await stripeLee(env, "prospectos/cuenta/" + dia + ".json")) || { n: 0 };
+  if (cuenta.n >= PROSPECTO_TOPE_DIA || !env.OPENAI_KEY) {
+    return { ok: true, tipo: "prospecto_charla", respuesta: "Ahorita no puedo contestarle por aquí. Escríbame por WhatsApp con el botón de abajo, por favor.", whatsapp: true };
+  }
+  cuenta.n++;
+  await stripeGuarda(env, "prospectos/cuenta/" + dia + ".json", cuenta);
+  const sabido = await soporteSabido(env);
+  const hechos = SOPORTE_BASE.map((b) => "- " + b.r).concat(sabido.map((x) => "- (Edsi) " + x.q + " -> " + x.r)).join("\n");
+  const res = await soporteIA(env, {
+    model: MODELO_OJO,
+    messages: [{ role: "system", content: ORDEN_PROSPECTO + "\n\nTIPO DE NEGOCIO DEL ANUNCIO: " + (reg.tipo || "no se sabe") + "\n\nHECHOS:\n" + hechos }].concat(plat),
+    response_format: { type: "json_object" },
+    max_completion_tokens: 500
+  }, 25);
+  let dicho = null;
+  if (res.ok) {
+    try {
+      const j = JSON.parse(res.texto);
+      const c = String(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || "");
+      dicho = JSON.parse(c);
+    } catch (e) { dicho = null; }
+  }
+  if (!dicho || !String(dicho.respuesta || "").trim()) {
+    return { ok: true, tipo: "prospecto_charla", respuesta: "Perdón, se me trabó. ¿Me repite su pregunta? O escríbame por WhatsApp con el botón de abajo.", whatsapp: true };
+  }
+  const respuesta = String(dicho.respuesta).replace(/\*\*/g, "").replace(/^#+\s*/gm, "").trim().slice(0, 900);
+  reg.mensajes++;
+  reg.ultima = isoMX();
+  reg.preguntas = (reg.preguntas || []).concat([pregunta]).slice(-40);
+  for (const k of ["negocio", "colonia", "nombre", "telefono"]) { const v = L(dicho[k], 80); if (v) reg[k] = v; }
+  const quien = (reg.negocio || "(negocio sin decir)") + (reg.colonia ? " · " + reg.colonia : "") + (reg.nombre ? " · " + reg.nombre : "") + (reg.telefono ? "\nTel: " + reg.telefono : "") + (reg.tipo ? "\nAnuncio: " + reg.tipo : "");
+  if (reg.colonia && !reg.avisado) {
+    reg.avisado = isoMX();
+    await avisaEdsiRed(env, "\u{1F525} <b>Interesado desde la página</b>\n" + quien + "\n\nPreguntó: " + reg.preguntas.slice(-5).join(" / ").replace(/[<>&]/g, "").slice(0, 600));
+  }
+  if (dicho.no_se === true) {
+    await avisaEdsiRed(env, "❓ <b>Un interesado preguntó algo que no sé</b>\n" + pregunta.replace(/[<>&]/g, "") + "\n\n" + quien +
+      "\n\nSi tiene WhatsApp o colonia, contáctalo. Si quieres que el bot lo sepa la próxima vez, contéstalo en el soporte.");
+  }
+  await stripeGuarda(env, llave, reg);
+  return { ok: true, tipo: "prospecto_charla", respuesta };
+}
 async function soporteVisita(env, clave, d) {
   const yo = await soporteQuien(env, d);
   const corta = (t, n) => String(t || "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -36603,6 +36670,7 @@ var ESCRITURAS = {
   tanque_stripe: tanqueStripe,
   kit_comprar: kitComprar,
   kit_contado: kitContado,
+  prospecto_charla: prospectoCharla,
   kit_suscribir: kitSuscribir,
   kit_enganche: kitEnganche,
   kit_mensual: kitMensual,
@@ -36964,7 +37032,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.33";  // version: "2.9.33"
+var VERSION_BETO = "2.9.34";  // version: "2.9.34"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -37704,6 +37772,119 @@ __name(mapaDeKits, "mapaDeKits");
 var STRIPE_CONTADO_HTML = '<div style="margin-top:24px"><label>O de contado, desde aqu&iacute;</label>' +
   '<button class="plazo" id="bContado"><span class="mes">De contado</span><span class="cuota"><b>$3,700</b><span>tarjeta, OXXO o transferencia</span></span></button>' +
   '<p class="ay">El cobro lo hace Stripe. Con OXXO o transferencia te da una ficha y tienes 3 d&iacute;as para pagar. Por ahora no emitimos factura.</p></div>';
+var HTML_PREGUNTA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>La Carta &middot; Preg&uacute;nteme</title>
+<meta name="description" content="Preg&uacute;ntele lo que quiera a La Carta: precios, qu&eacute; trae la caja y c&oacute;mo funciona.">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#0e1113;color:#f2f4f6;font-family:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+.tapa{max-width:520px;margin:0 auto;padding:22px 16px 30px;min-height:100vh;display:flex;flex-direction:column}
+.marca{font-size:18px;font-weight:900;letter-spacing:2.6px}
+.marca small{display:block;font-size:10.5px;font-weight:800;letter-spacing:2px;color:#8b959e;margin-top:2px}
+h1{font-size:24px;line-height:1.2;margin:18px 0 6px;font-weight:900}
+.baja{font-size:15px;line-height:1.5;color:#c2cad1;margin:0 0 14px}
+#chat{flex:1;display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.b{max-width:86%;padding:11px 14px;border-radius:16px;font-size:15.5px;line-height:1.45;white-space:pre-wrap}
+.b.el{background:#1b2126;border:1px solid #2b333a;align-self:flex-start;border-bottom-left-radius:5px}
+.b.yo{background:#0f7b52;align-self:flex-end;border-bottom-right-radius:5px}
+.b.pensando{color:#8b959e;font-style:italic}
+.rapidas{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.rapidas button{background:none;border:1.5px solid #2f3a41;color:#c2cad1;border-radius:999px;padding:8px 13px;font:600 13.5px system-ui;cursor:pointer}
+.escribe{display:flex;gap:8px;align-items:flex-end}
+.escribe textarea{flex:1;resize:none;border-radius:14px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;padding:12px 13px;font:16px system-ui;min-height:48px;max-height:130px}
+.escribe button{border:0;border-radius:14px;min-width:48px;height:48px;font:800 15px system-ui;cursor:pointer}
+#mic{background:#1b2126;color:#f2f4f6;border:1.5px solid #2f3a41}
+#mic.on{background:#b3411a;border-color:#b3411a}
+#env{background:#d98324;color:#1b1206;padding:0 16px}
+.wa{display:block;text-align:center;margin-top:14px;padding:14px;border-radius:14px;background:#128c4a;color:#fff;font:800 16px system-ui;text-decoration:none}
+.ver{display:block;text-align:center;margin-top:10px;color:#8fd6ac;font-size:14.5px}
+.pie{margin-top:18px;padding-top:12px;border-top:1px solid #232a30;font-size:12px;line-height:1.55;color:#78838f;text-align:center}
+.pie a{color:#8b959e}
+</style></head><body><div class="tapa">
+<div class="marca">LA CARTA<small>COMANDERO C1</small></div>
+<h1>Preg&uacute;nteme lo que quiera</h1>
+<p class="baja">Le contesto al momento, a cualquier hora. Si prefiere hablar con una persona, use el bot&oacute;n verde.</p>
+<div id="chat"></div>
+<div class="rapidas" id="rapidas">
+<button type="button">&iquest;Cu&aacute;nto cuesta?</button>
+<button type="button">&iquest;Qu&eacute; trae la caja?</button>
+<button type="button">&iquest;Funciona con mi celular?</button>
+<button type="button">&iquest;Hay pago mensual?</button>
+</div>
+<div class="escribe">
+<textarea id="t" rows="1" placeholder="Escriba su pregunta"></textarea>
+<button id="mic" type="button" title="Hablar">&#127908;</button>
+<button id="env" type="button">Enviar</button>
+</div>
+<a id="wa" class="wa" target="_blank" rel="noopener" style="display:none">Mejor escr&iacute;bame por WhatsApp</a>
+<a id="ver" class="ver" href="/video">Ver c&oacute;mo funciona (video de un minuto)</a>
+<div class="pie">Por ahora no emitimos factura. &middot; <a href="/privacidad">Aviso de privacidad</a></div>
+</div>
+<script>
+(function(){
+  var WA = "{{WA}}".replace(/[^0-9]/g, "");
+  var qs = new URLSearchParams(location.search);
+  var TIPO = (qs.get("t") || "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 20);
+  var chat = document.getElementById("chat"), t = document.getElementById("t"), env = document.getElementById("env");
+  var ses = "";
+  try { ses = sessionStorage.getItem("pregunta_ses") || ""; } catch (e) {}
+  if (!ses) { ses = (Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/[^a-z0-9]/g, "").slice(0, 20); try { sessionStorage.setItem("pregunta_ses", ses); } catch (e) {} }
+  var mensajes = [], ocupado = false;
+  if (WA) {
+    var wa = document.getElementById("wa");
+    wa.href = "https://wa.me/" + WA + "?text=" + encodeURIComponent("Hola, vi La Carta y quiero informes.");
+    wa.style.display = "block";
+  }
+  if (TIPO) document.getElementById("ver").href = "/video?t=" + encodeURIComponent(TIPO);
+  function burbuja(texto, quien){
+    var d = document.createElement("div");
+    d.className = "b " + quien;
+    d.textContent = texto;
+    chat.appendChild(d);
+    d.scrollIntoView({ block: "end", behavior: "smooth" });
+    return d;
+  }
+  burbuja("Hola, soy el asistente de La Carta. Pregúnteme lo que quiera: cuánto cuesta, qué trae la caja o cómo funciona.", "el");
+  function manda(texto){
+    texto = String(texto || "").trim();
+    if (!texto || ocupado) return;
+    ocupado = true; env.disabled = true;
+    burbuja(texto, "yo");
+    mensajes.push({ de: "yo", t: texto });
+    t.value = "";
+    var espera = burbuja("Escribiendo...", "el pensando");
+    fetch("/beto-guarda", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ c: "kit", tipo: "prospecto_charla", datos: { sesion: ses, tipo: TIPO, mensajes: mensajes.slice(-10) } }) })
+    .then(function(r){ return r.json(); })
+    .then(function(r){
+      espera.remove();
+      var dicho = (r && r.respuesta) ? r.respuesta : ((r && r.error) ? r.error : "Perdón, no le entendí. ¿Me lo repite?");
+      burbuja(dicho, "el");
+      mensajes.push({ de: "el", t: dicho });
+    })
+    .catch(function(){ espera.remove(); burbuja("No se pudo enviar. Revise su señal e intente otra vez.", "el"); })
+    .then(function(){ ocupado = false; env.disabled = false; });
+  }
+  env.onclick = function(){ manda(t.value); };
+  t.addEventListener("keydown", function(e){ if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); manda(t.value); } });
+  var rap = document.querySelectorAll("#rapidas button");
+  for (var i = 0; i < rap.length; i++) rap[i].onclick = function(){ manda(this.textContent); };
+  var Rec = window.SpeechRecognition || window.webkitSpeechRecognition, mic = document.getElementById("mic");
+  if (!Rec) { mic.style.display = "none"; }
+  else {
+    var rec = null;
+    mic.onclick = function(){
+      if (rec) { rec.stop(); return; }
+      rec = new Rec(); rec.lang = "es-MX"; rec.interimResults = false;
+      rec.onresult = function(e){ t.value = (t.value ? t.value + " " : "") + e.results[0][0].transcript; };
+      rec.onend = function(){ rec = null; mic.classList.remove("on"); };
+      mic.classList.add("on"); rec.start();
+    };
+  }
+})();
+</script>
+</body></html>`;
 var HTML_PRIVACIDAD = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Aviso de privacidad · La Carta</title>
@@ -37744,6 +37925,7 @@ li{margin-bottom:5px}
 <li>Lo que le escribes a Beto, el asistente que contesta por el negocio.</li>
 </ul>
 <p><b>Si vendes La Carta:</b> tu nombre, tu tel&eacute;fono, tu usuario de Telegram, las visitas que registras y las dudas que haces, tambi&eacute;n las de voz.</p>
+<p><b>Si nos escribes para pedir informes</b> (en lacartamenu.com/pregunta): lo que escribes y, si nos lo das, el nombre de tu negocio, tu colonia, tu nombre y tu tel&eacute;fono, para contestarte y para que alguien de La Carta te pueda visitar.</p>
 <p><b>No te pedimos datos sensibles</b> (salud, religi&oacute;n, origen, preferencias ni nada parecido).</p>
 
 <h2>3. Para qu&eacute; los usamos</h2>
@@ -40836,6 +41018,12 @@ await chatAvisar(env, cfg,
           "x-content-type-options": "nosniff",
           "cache-control": "no-store"
         }
+      });
+    }
+    if (ruta === "/pregunta" || ruta === "/preguntas" || ruta === "/informes") {
+      return new Response(HTML_PREGUNTA.replace("{{WA}}", whatsCasa(env)), {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
     }
     if (ruta === "/soporte") {
