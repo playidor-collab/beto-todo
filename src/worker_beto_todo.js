@@ -36964,7 +36964,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.32";  // version: "2.9.32"
+var VERSION_BETO = "2.9.33";  // version: "2.9.33"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -40974,6 +40974,13 @@ await chatAvisar(env, cfg,
               return { hay: true, apunta_a: String(x.url || "(nada)"), atorados: x.pending_update_count || 0,
                 ultimo_error: String(x.last_error_message || ""), error_hace_min: x.last_error_date ? Math.round((Date.now() / 1e3 - x.last_error_date) / 60) : null };
             } catch (e) { return { hay: true, error: "no pude preguntarle a Telegram" }; }
+          })(),
+          stripe: (() => {
+            const k = String(env.STRIPE_KEY || "").trim(), f = String(env.STRIPE_FIRMA || "").trim();
+            const llave = !k ? "falta" : /^rk_live_[A-Za-z0-9]{20,}$/.test(k) ? "real" : /^rk_test_[A-Za-z0-9]{20,}$/.test(k) ? "prueba"
+              : /^whsec_/.test(k) ? "es una firma (whsec_)" : /^sk_/.test(k) ? "es una llave NO restringida (sk_)" : "rara";
+            const firma = !f ? "falta" : /^whsec_[A-Za-z0-9]{20,}$/.test(f) ? "bien" : /^(rk|sk)_/.test(f) ? "es una llave (rk_)" : "rara";
+            return { llave, firma, prendido: hayStripe(env) };
           })(),
           hora_mexico: fechaHoraMX(),
           rutas: [
