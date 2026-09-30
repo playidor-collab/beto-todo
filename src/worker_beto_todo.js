@@ -37032,7 +37032,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.34";  // version: "2.9.34"
+var VERSION_BETO = "2.9.35";  // version: "2.9.35"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -37772,6 +37772,213 @@ __name(mapaDeKits, "mapaDeKits");
 var STRIPE_CONTADO_HTML = '<div style="margin-top:24px"><label>O de contado, desde aqu&iacute;</label>' +
   '<button class="plazo" id="bContado"><span class="mes">De contado</span><span class="cuota"><b>$3,700</b><span>tarjeta, OXXO o transferencia</span></span></button>' +
   '<p class="ay">El cobro lo hace Stripe. Con OXXO o transferencia te da una ficha y tienes 3 d&iacute;as para pagar. Por ahora no emitimos factura.</p></div>';
+var HTML_PORTADA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>La Carta &middot; El mesero digital para taquer&iacute;as, fondas y puestos</title>
+<meta name="description" content="Sus clientes escanean el c&oacute;digo de su mesa, piden desde su celular y la comanda sale impresa sola en su cocina. Sin computadora. Manzanillo y Colima.">
+<meta property="og:title" content="La Carta &middot; Que nadie se le vaya por esperar">
+<meta property="og:description" content="Sus clientes piden desde su celular y la comanda sale impresa sola en su cocina. Sin computadora.">
+<meta property="og:url" content="https://lacartamenu.com/">
+<meta property="og:type" content="website">
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#0e1113;color:#f2f4f6;font-family:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+a{color:inherit}
+.ancho{max-width:1120px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid #1f262c;background:#0e1113;position:sticky;top:0;z-index:5}
+header .ancho{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;padding-bottom:14px}
+.marca{font-size:18px;font-weight:900;letter-spacing:2.6px;text-decoration:none}
+.marca small{display:block;font-size:10.5px;font-weight:700;letter-spacing:1.5px;color:#8b959e;margin-top:3px}
+.nav{display:flex;gap:10px}
+.btn{display:inline-block;text-decoration:none;border-radius:12px;padding:13px 20px;font-weight:800;font-size:15.5px;text-align:center}
+.btn.naranja{background:#d98324;color:#1b1206}
+.btn.borde{border:1.5px solid #3a454d;color:#f2f4f6}
+.btn.chico{padding:9px 14px;font-size:14px}
+.heroe{padding:56px 0 40px}
+.heroe .ancho{display:grid;grid-template-columns:1.15fr .85fr;gap:44px;align-items:center}
+.kicker{color:#e8a65a;font-weight:800;font-size:12.5px;letter-spacing:1.8px;text-transform:uppercase;margin:0 0 14px}
+h1{font-size:clamp(34px,5.4vw,58px);line-height:1.04;margin:0 0 18px;font-weight:900;letter-spacing:-.5px}
+.lead{font-size:18.5px;line-height:1.55;color:#c2cad1;margin:0 0 26px;max-width:560px}
+.botones{display:flex;flex-wrap:wrap;gap:12px}
+.ticket{background:#f7f3ea;color:#16120c;border-radius:6px;padding:22px 22px 26px;font-family:"Courier New",monospace;box-shadow:0 18px 50px rgba(0,0,0,.45);transform:rotate(1.5deg);max-width:340px;margin:0 auto;position:relative}
+.ticket:after{content:"";position:absolute;left:0;right:0;bottom:-10px;height:12px;background:linear-gradient(-45deg,transparent 8px,#f7f3ea 0) 0 0/16px 12px repeat-x}
+.ticket .mesa{text-align:center;font:900 34px system-ui;margin:4px 0 2px;letter-spacing:1px}
+.ticket .hora{display:flex;justify-content:space-between;font-size:13px;color:#5a5144;margin-bottom:10px}
+.ticket hr{border:0;border-top:2px dashed #9b8f7c;margin:10px 0}
+.ticket .p{font:800 19px system-ui;margin:7px 0}
+.ticket .n{font-size:14px;color:#5a5144;margin:-3px 0 6px 22px}
+.ticket .pie{text-align:center;font-size:12.5px;color:#5a5144;margin-top:12px}
+.etiqueta{text-align:center;color:#8b959e;font-size:13px;margin-top:22px}
+section{padding:54px 0;border-top:1px solid #1a2026}
+h2{font-size:clamp(26px,3.4vw,36px);line-height:1.15;margin:0 0 10px;font-weight:900}
+.sub{color:#aab4be;font-size:16.5px;line-height:1.55;margin:0 0 28px;max-width:680px}
+.pasos{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.paso{background:#161b20;border:1px solid #242c33;border-radius:16px;padding:20px}
+.paso b{display:inline-flex;width:34px;height:34px;border-radius:50%;background:#0f7b52;color:#fff;align-items:center;justify-content:center;font-size:16px;margin-bottom:12px}
+.paso h3{margin:0 0 6px;font-size:17px}
+.paso p{margin:0;color:#aab4be;font-size:14.5px;line-height:1.5}
+.giros{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.giro{background:#161b20;border:1px solid #242c33;border-radius:14px;padding:16px}
+.giro .e{font-size:26px}
+.giro h3{margin:8px 0 4px;font-size:15.5px}
+.giro p{margin:0;color:#aab4be;font-size:13.5px;line-height:1.45}
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.precio{background:#161b20;border:1.5px solid #2b343b;border-radius:18px;padding:24px}
+.precio.destacado{border-color:#d98324}
+.precio .t{font-size:12.5px;font-weight:800;letter-spacing:1.6px;color:#8b959e;text-transform:uppercase}
+.precio .m{font-size:40px;font-weight:900;margin:8px 0 2px}
+.precio .m small{font-size:16px;color:#aab4be;font-weight:700}
+.precio ul{margin:14px 0 0;padding-left:18px;color:#c2cad1;font-size:15px;line-height:1.7}
+.nota{color:#8b959e;font-size:14px;line-height:1.55;margin-top:18px}
+.caja{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.cosa{background:#161b20;border:1px solid #242c33;border-radius:14px;padding:16px;font-size:14.5px;line-height:1.5;color:#c2cad1}
+.cosa b{display:block;color:#f2f4f6;font-size:15.5px;margin-bottom:4px}
+details{background:#161b20;border:1px solid #242c33;border-radius:14px;padding:16px 18px;margin-bottom:10px}
+summary{cursor:pointer;font-weight:800;font-size:16px}
+details p{color:#c2cad1;font-size:15px;line-height:1.55;margin:10px 0 0}
+.final{text-align:center}
+.final .botones{justify-content:center}
+footer{border-top:1px solid #1a2026;padding:28px 0 40px;color:#78838f;font-size:13.5px;line-height:1.7}
+footer .ancho{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px}
+.wa{display:none}
+@media (max-width:900px){
+  .heroe .ancho{grid-template-columns:1fr}
+  .pasos,.caja{grid-template-columns:1fr 1fr}
+  .giros{grid-template-columns:1fr 1fr}
+  .dos{grid-template-columns:1fr}
+  .nav .btn.borde{display:none}
+}
+@media (max-width:520px){
+  .pasos,.caja,.giros{grid-template-columns:1fr}
+  .heroe{padding-top:32px}
+  .botones .btn{flex:1 1 100%}
+}
+</style></head><body>
+<header><div class="ancho">
+<a class="marca" href="/">LA CARTA<small>COMANDERO C1 &middot; MANZANILLO, COLIMA</small></a>
+<div class="nav"><a class="btn borde chico" href="/pregunta">Preg&uacute;ntenos</a><a class="btn naranja chico" href="/comprar">Comprar</a></div>
+</div></header>
+
+<div class="heroe"><div class="ancho">
+<div>
+<p class="kicker">El mesero digital para taquer&iacute;as, fondas y puestos</p>
+<h1>Que nadie se le vaya por esperar.</h1>
+<p class="lead">Sus clientes escanean el c&oacute;digo de su mesa, piden desde su celular y la comanda sale impresa sola en su cocina. Usted cobra y hace su corte desde su tel&eacute;fono. Sin computadora.</p>
+<div class="botones">
+<a class="btn naranja" href="/pregunta">Preg&uacute;ntenos lo que quiera</a>
+<a class="btn borde" href="/video">Ver el video de un minuto</a>
+</div>
+</div>
+<div>
+<div class="ticket">
+<div class="mesa">MESA 3</div>
+<div class="hora"><span>14:32</span><span>#0118</span></div>
+<hr>
+<div class="p">2 x Taco de pastor</div>
+<div class="n">con todo</div>
+<div class="p">1 x Quesadilla</div>
+<div class="p">1 x Agua de horchata</div>
+<div class="n">sin hielo</div>
+<hr>
+<div class="pie">Pedido desde la mesa &middot; La Carta</div>
+</div>
+<p class="etiqueta">As&iacute; sale en su cocina, solo, sin que nadie lo tome.</p>
+</div>
+</div></div>
+
+<section id="como"><div class="ancho">
+<h2>C&oacute;mo funciona</h2>
+<p class="sub">No baja ninguna aplicaci&oacute;n. El cliente solo abre una p&aacute;gina con la c&aacute;mara de su celular.</p>
+<div class="pasos">
+<div class="paso"><b>1</b><h3>Escanea su mesa</h3><p>Cada mesa tiene su c&oacute;digo QR. El cliente lo apunta con la c&aacute;mara.</p></div>
+<div class="paso"><b>2</b><h3>Pide desde su celular</h3><p>Ve su men&uacute; con los precios de hoy, no una foto vieja, y manda su pedido.</p></div>
+<div class="paso"><b>3</b><h3>Sale en su cocina</h3><p>La comanda se imprime sola, con el n&uacute;mero de mesa. Nadie la anota.</p></div>
+<div class="paso"><b>4</b><h3>Usted cobra</h3><p>Cierra la mesa y hace el corte del d&iacute;a desde su tel&eacute;fono.</p></div>
+</div>
+</div></section>
+
+<section id="negocios"><div class="ancho">
+<h2>Para su tipo de negocio</h2>
+<p class="sub">Usted apaga lo que no usa. Todo lo dem&aacute;s se queda igual que hoy.</p>
+<div class="giros">
+<div class="giro"><div class="e">&#127869;&#65039;</div><h3>Con mesas</h3><p>Cada mesa pide sola. Usted atiende sin correr.</p></div>
+<div class="giro"><div class="e">&#127858;</div><h3>Fondas</h3><p>El men&uacute; del d&iacute;a cambia y el cliente lo ve al momento.</p></div>
+<div class="giro"><div class="e">&#127866;</div><h3>Botaneros</h3><p>La cuenta de la mesa se va sumando sola.</p></div>
+<div class="giro"><div class="e">&#127881;</div><h3>Eventos</h3><p>Muchos pedidos a la vez, sin gritos ni papelitos.</p></div>
+<div class="giro"><div class="e">&#127968;</div><h3>A domicilio</h3><p>Beto le contesta a los que piden desde su casa.</p></div>
+</div>
+</div></section>
+
+<section id="caja"><div class="ancho">
+<h2>Qu&eacute; trae la caja</h2>
+<p class="sub">No es una aplicaci&oacute;n que baja y ah&iacute; le ve. Es una caja que alguien le lleva y le instala en unos diez minutos.</p>
+<div class="caja">
+<div class="cosa"><b>La impresora</b>T&eacute;rmica, Bluetooth, con su funda, cable y rollos de papel.</div>
+<div class="cosa"><b>Sus c&oacute;digos QR</b>Los de cada mesa y el del mostrador, ya impresos.</div>
+<div class="cosa"><b>300 pl&aacute;ticas con Beto</b>El que contesta a los que piden desde su casa.</div>
+<div class="cosa"><b>Garant&iacute;a</b>Tres meses, con su p&oacute;liza.</div>
+</div>
+</div></section>
+
+<section id="precios"><div class="ancho">
+<h2>Cu&aacute;nto cuesta</h2>
+<p class="sub">Los sistemas para restaurante cobran como $810 al mes. &Eacute;ste, mucho menos, con la impresora incluida.</p>
+<div class="dos">
+<div class="precio destacado">
+<div class="t">Pago anual</div>
+<div class="m">$3,700 <small>por un a&ntilde;o</small></div>
+<ul>
+<li>Sale en unos $308 al mes.</li>
+<li>O $4,150 a 3 meses sin intereses con tarjeta de cr&eacute;dito.</li>
+<li>Cada a&ntilde;o se renueva por $3,700.</li>
+</ul>
+</div>
+<div class="precio">
+<div class="t">Suscripci&oacute;n</div>
+<div class="m">$400 <small>al mes</small></div>
+<ul>
+<li>Con $1,300 de enganche.</li>
+<li>Cobro autom&aacute;tico a su tarjeta cada mes.</li>
+<li>Sin plazo forzoso.</li>
+</ul>
+</div>
+</div>
+<p class="nota">En las dos, la impresora se queda con usted: si deja de pagar, el servicio se corta y la impresora es suya. Por ahora no emitimos factura. Los tickets que imprime el equipo son informativos, no comprobantes fiscales.</p>
+<div class="botones" style="margin-top:20px"><a class="btn naranja" href="/comprar">Ver c&oacute;mo comprar</a></div>
+</div></section>
+
+<section id="dudas"><div class="ancho">
+<h2>Lo que siempre preguntan</h2>
+<details><summary>&iquest;Y el cliente que no sabe usar el celular?</summary><p>Le pide al mesero como siempre. Nadie est&aacute; obligado. Esto es para que los que s&iacute; saben no le hagan perder tiempo a usted.</p></details>
+<details><summary>&iquest;Necesito computadora?</summary><p>No. Solo un tel&eacute;fono o tableta Android con Chrome para la cocina y la impresora, e internet en el negocio: WiFi o los datos del celular.</p></details>
+<details><summary>&iquest;Funciona con iPhone?</summary><p>Para la cocina y la impresora hace falta Android: con iPhone la impresora no se conecta. Sus clientes s&iacute; pueden pedir con cualquier celular, iPhone o Android.</p></details>
+<details><summary>&iquest;Qui&eacute;n me lo instala?</summary><p>Se lo llevamos y se lo instalamos en persona en Manzanillo, Colima, Tecom&aacute;n y Ciudad Guzm&aacute;n. Se pone en unos diez minutos.</p></details>
+<details><summary>&iquest;Qu&eacute; pasa si dejo de pagar?</summary><p>El servicio se corta y usted se queda con la impresora. No es un cr&eacute;dito ni le cobramos nada extra.</p></details>
+</div></section>
+
+<section class="final"><div class="ancho">
+<h2>&iquest;Le late para su negocio?</h2>
+<p class="sub" style="margin-left:auto;margin-right:auto">Preg&uacute;ntenos lo que quiera. Si nos dice en qu&eacute; colonia est&aacute;, se lo llevamos a ense&ntilde;ar funcionando, sin compromiso.</p>
+<div class="botones">
+<a class="btn naranja" href="/pregunta">Preg&uacute;ntenos</a>
+<a class="btn borde wa" id="wa" target="_blank" rel="noopener">Escr&iacute;banos por WhatsApp</a>
+</div>
+</div></section>
+
+<footer><div class="ancho">
+<div>La Carta &middot; Comandero C1 &middot; Manzanillo, Colima, M&eacute;xico</div>
+<div><a href="/pregunta">Preguntas</a> &middot; <a href="/comprar">Comprar</a> &middot; <a href="/privacidad">Aviso de privacidad</a> &middot; privacidad@lacartamenu.com</div>
+</div></footer>
+<script>
+(function(){
+  var WA = "{{WA}}".replace(/[^0-9]/g, "");
+  if (!WA) return;
+  var a = document.getElementById("wa");
+  a.href = "https://wa.me/" + WA + "?text=" + encodeURIComponent("Hola, vi La Carta y quiero informes.");
+  a.style.display = "inline-block";
+})();
+</script>
+</body></html>`;
 var HTML_PREGUNTA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>La Carta &middot; Preg&uacute;nteme</title>
@@ -41137,7 +41344,13 @@ await chatAvisar(env, cfg,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
     }
-    if (ruta === "/estado" || ruta === "/") {
+    if (ruta === "/") {
+      return new Response(HTML_PORTADA.replace("{{WA}}", whatsCasa(env)), {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" }
+      });
+    }
+    if (ruta === "/estado") {
       try {
         const r = await fetch(N8N + "/api/v1/data-tables?limit=50", { headers: cabeceras(env) });
         const cuerpo = await r.text();
