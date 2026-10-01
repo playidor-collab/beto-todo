@@ -37091,7 +37091,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.37";  // version: "2.9.37"
+var VERSION_BETO = "2.9.38";  // version: "2.9.38"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -38030,7 +38030,7 @@ footer .ancho{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px
 
 <footer><div class="ancho">
 <div>La Carta &middot; Comandero C1 &middot; Manzanillo, Colima, M&eacute;xico</div>
-<div><a href="/pregunta">Preguntas</a> &middot; <a href="/comprar">Comprar</a> &middot; <a href="/privacidad">Aviso de privacidad</a> &middot; privacidad@lacartamenu.com</div>
+<div><a href="/pregunta">Preguntas</a> &middot; <a href="/comprar">Comprar</a> &middot; <a href="/terminos">T&eacute;rminos y condiciones</a> &middot; <a href="/privacidad">Aviso de privacidad</a> &middot; privacidad@lacartamenu.com</div>
 </div></footer>
 <script>
 (function(){
@@ -38095,7 +38095,7 @@ h1{font-size:24px;line-height:1.2;margin:18px 0 6px;font-weight:900}
 </div>
 <a id="wa" class="wa" target="_blank" rel="noopener" style="display:none">Mejor escr&iacute;bame por WhatsApp</a>
 <a id="ver" class="ver" href="/video">Ver c&oacute;mo funciona (video de un minuto)</a>
-<div class="pie">Por ahora no emitimos factura. &middot; <a href="/privacidad">Aviso de privacidad</a></div>
+<div class="pie">Por ahora no emitimos factura. &middot; <a href="/terminos">T&eacute;rminos</a> &middot; <a href="/privacidad">Aviso de privacidad</a></div>
 </div>
 <script>
 (function(){
@@ -38161,6 +38161,92 @@ h1{font-size:24px;line-height:1.2;margin:18px 0 6px;font-weight:900}
 })();
 </script>
 </body></html>`;
+var HTML_TERMINOS = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>T&eacute;rminos y condiciones &middot; La Carta</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#f6f7f5;color:#1d2420;font-family:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+.tapa{max-width:720px;margin:0 auto;padding:28px 18px 60px}
+.marca{font-size:17px;font-weight:900;letter-spacing:2.4px}
+.marca a{color:inherit;text-decoration:none}
+h1{font-size:26px;line-height:1.2;margin:18px 0 6px}
+.fecha{color:#66736c;font-size:13.5px;margin:0 0 22px}
+h2{font-size:17px;margin:28px 0 8px}
+p,li{font-size:15.5px;line-height:1.6;color:#2c3530}
+ul{padding-left:20px;margin:6px 0}
+li{margin-bottom:5px}
+.caja{background:#fff;border:1px solid #dde3df;border-radius:12px;padding:14px 16px}
+.falta{background:#fff3c4;border-radius:4px;padding:0 4px}
+</style></head><body><div class="tapa">
+<div class="marca"><a href="/">LA CARTA</a></div>
+<h1>T&eacute;rminos y condiciones</h1>
+<p class="fecha">&Uacute;ltima actualizaci&oacute;n: 1 de octubre de 2026</p>
+
+<div class="caja"><p style="margin:0">En corto: le vendemos una caja con impresora y le damos el servicio de La Carta por el tiempo que pague. <b>La impresora es suya.</b> Si deja de pagar o no renueva, el servicio se corta, la impresora se queda con usted y no le cobramos nada extra.</p></div>
+
+<h2>1. Qui&eacute;n le vende</h2>
+<p>Edsi Fabi&aacute;n P&eacute;rez Jaramillo, con el nombre comercial <b>La Carta</b> (lacartamenu.com). Domicilio: Calle Neptuno 229, Valle Esmeralda, Barrio 4, C.P. 28219, Manzanillo, Colima, M&eacute;xico. Contacto: <b>privacidad@lacartamenu.com</b>.</p>
+<p>Al comprar o usar La Carta usted acepta estos t&eacute;rminos.</p>
+
+<h2>2. Qu&eacute; incluye</h2>
+<ul>
+<li><b>La caja (Comandero C1):</b> impresora t&eacute;rmica Bluetooth con su funda, cable y rollos de papel; sus c&oacute;digos QR de mesa y de mostrador, ya impresos; su p&oacute;liza de garant&iacute;a y el instructivo.</li>
+<li><b>El servicio:</b> su men&uacute; digital; los pedidos desde la mesa, para llevar o a domicilio; la pantalla de cocina; la caja, el cobro y el corte del d&iacute;a; y Beto, el asistente que contesta a los que piden desde su casa, con <b>300 pl&aacute;ticas</b> incluidas.</li>
+<li><b>La instalaci&oacute;n:</b> en persona en Manzanillo, Colima, Tecom&aacute;n y Ciudad Guzm&aacute;n.</li>
+</ul>
+
+<h2>3. Lo que usted necesita</h2>
+<ul>
+<li>Un tel&eacute;fono o tableta <b>Android con Chrome</b> para la cocina y la impresora. Con iPhone la impresora no se conecta.</li>
+<li><b>Internet</b> en el negocio: WiFi o los datos del celular.</li>
+<li>Sus clientes pueden pedir con cualquier celular, iPhone o Android.</li>
+</ul>
+
+<h2>4. Precios y formas de pago</h2>
+<ul>
+<li><b>Pago anual:</b> $3,700 por <b>un a&ntilde;o</b> de servicio. O $4,150 a 3 meses sin intereses con tarjeta de cr&eacute;dito.</li>
+<li><b>Suscripci&oacute;n:</b> $1,300 de enganche y <b>$400 al mes</b>, cobrados autom&aacute;ticamente a su tarjeta. El primer mes se cobra 30 d&iacute;as despu&eacute;s del enganche.</li>
+<li><b>Recargas de Beto:</b> $100 por 300 pl&aacute;ticas m&aacute;s. No se vencen.</li>
+</ul>
+<p>Los precios son en pesos mexicanos y son los que est&aacute;n publicados en lacartamenu.com el d&iacute;a de su compra. Se cobra exactamente el precio publicado: no se agrega nada al pagar.</p>
+<p>Los pagos en l&iacute;nea los procesan <b>Stripe</b> (tarjeta, OXXO o transferencia) y <b>Mercado Pago</b> (tarjeta a meses). Nosotros nunca vemos los datos de su tarjeta. Tambi&eacute;n puede pagar en efectivo con la persona que se lo instala.</p>
+<p><b>Por ahora no emitimos factura.</b> Los tickets que imprime el equipo son informativos, no comprobantes fiscales.</p>
+
+<h2>5. Renovaci&oacute;n, cancelaci&oacute;n y falta de pago</h2>
+<ul>
+<li><b>Pago anual:</b> al cumplirse el a&ntilde;o se renueva por $3,700. No se cobra solo: usted decide si renueva.</li>
+<li><b>Suscripci&oacute;n:</b> puede cancelarla cuando quiera, escribi&eacute;ndonos. No hay plazo forzoso.</li>
+<li>Si deja de pagar, no renueva o cancela, <b>el servicio se suspende</b>. No es un cr&eacute;dito: no le cobramos intereses, penalizaciones ni nada extra, y <b>la impresora se queda con usted</b>.</li>
+<li>Si un cobro de la suscripci&oacute;n falla, la tarjeta se vuelve a intentar. Si pasan m&aacute;s de 35 d&iacute;as sin pago, el servicio se suspende solo y se reactiva solo en cuanto quede al corriente.</li>
+</ul>
+
+<h2>6. Garant&iacute;a</h2>
+<p>La impresora tiene <b>3 meses de garant&iacute;a</b> contra defectos de f&aacute;brica, en los t&eacute;rminos de la p&oacute;liza que viene en la caja. El tel&eacute;fono para hacerla v&aacute;lida viene en la misma p&oacute;liza.</p>
+
+<h2>7. Devoluciones</h2>
+<p>Si la caja llega da&ntilde;ada o la impresora no funciona al instalarla, se la cambiamos sin costo. Si cambia de opini&oacute;n, puede devolver la caja completa y sin da&ntilde;os dentro de los 5 d&iacute;as h&aacute;biles siguientes a la instalaci&oacute;n, y le regresamos lo que pag&oacute;, menos la comisi&oacute;n que cobr&oacute; el banco o la tienda. Las recargas de Beto que ya se usaron no se devuelven.</p>
+
+<h2>8. Lo que le toca a usted</h2>
+<ul>
+<li>Su men&uacute;, sus precios y lo que cobra a sus clientes son su responsabilidad. Rev&iacute;selos en su panel.</li>
+<li>Beto contesta con inteligencia artificial a partir de lo que usted le da. Puede equivocarse: revise lo que dice y corr&iacute;jalo cuando haga falta.</li>
+<li>Cuide los NIP de su equipo. Quien tiene el NIP del due&ntilde;o puede cobrar y cambiar precios.</li>
+<li>No use La Carta para vender cosas ilegales ni para molestar a nadie.</li>
+</ul>
+
+<h2>9. Disponibilidad</h2>
+<p>La Carta funciona por internet. Hacemos todo para que est&eacute; siempre disponible, pero puede haber fallas de internet, de los servicios en los que se apoya o mantenimientos. Si algo falla, sus clientes pueden pedirle al mesero como siempre. Si la falla es nuestra y dura m&aacute;s de un d&iacute;a, le reponemos ese tiempo de servicio.</p>
+
+<h2>10. Sus datos</h2>
+<p>Lo que hacemos con sus datos est&aacute; en el <a href="/privacidad">aviso de privacidad</a>.</p>
+
+<h2>11. Cambios a estos t&eacute;rminos</h2>
+<p>Si cambiamos precios o t&eacute;rminos, lo publicamos aqu&iacute; con la fecha nueva y le avisamos con al menos 30 d&iacute;as. Lo que usted ya pag&oacute; se respeta con las condiciones con las que lo compr&oacute;.</p>
+
+<h2>12. Dudas y quejas</h2>
+<p>Escr&iacute;banos a privacidad@lacartamenu.com o preg&uacute;ntenos en <a href="/pregunta">lacartamenu.com/pregunta</a>. Estos t&eacute;rminos se rigen por las leyes de M&eacute;xico. Para cualquier controversia, usted tambi&eacute;n puede acudir a la Procuradur&iacute;a Federal del Consumidor (Profeco).</p>
+</div></body></html>`;
 var HTML_PRIVACIDAD = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Aviso de privacidad · La Carta</title>
@@ -38312,7 +38398,7 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 
 <p class="ay">Funciona con tel&eacute;fono o tableta <b>Android</b>. No es compatible con iPhone ni iPad. Necesita internet en el negocio.</p>
 
-<div class="pie">Los tickets que imprime el equipo son documentos informativos, no comprobantes fiscales.<br><a href="/privacidad" style="color:#8fd6ac">Aviso de privacidad</a></div>
+<div class="pie">Los tickets que imprime el equipo son documentos informativos, no comprobantes fiscales.<br><a href="/terminos" style="color:#8fd6ac">T&eacute;rminos y condiciones</a> &middot; <a href="/privacidad" style="color:#8fd6ac">Aviso de privacidad</a></div>
 </div>
 <script>
 var m = document.getElementById('m');
@@ -40555,6 +40641,9 @@ await chatAvisar(env, cfg,
        lo usa para dar de alta un negocio. */
     /* EL QR DE PAGO. Va impreso en el papel que trae el vendedor: el cliente
        lo escanea, escoge su plazo y paga con su tarjeta. */
+    if (ruta === "/terminos" || ruta === "/terminos-y-condiciones") {
+      return new Response(HTML_TERMINOS, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" } });
+    }
     if (ruta === "/privacidad" || ruta === "/aviso-de-privacidad") {
       return new Response(HTML_PRIVACIDAD, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" } });
     }
