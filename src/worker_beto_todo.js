@@ -35719,7 +35719,7 @@ async function kitSuscribirStripe(env, clave, d) {
   if (!hayStripe(env)) throw new Error("todavía no se puede pagar así");
   const reg = await leeSuscripcion(env, d.id);
   if (reg.stripe_sub) throw new Error("esa suscripción ya está activa");
-  const efectivo = !!(d && d.efectivo);
+  const efectivo = !!(d && d.efectivo) || !!reg.enganche_aparte;
   const base = origenPublico("", String(d && d.__origen || ""));
   const cli = await stripePide(env, "POST", "/v1/customers", [
     ["description", "Suscripción La Carta · " + reg.negocio], ["name", String(reg.dueno || "").slice(0, 60)],
@@ -35737,7 +35737,7 @@ async function kitSuscribirStripe(env, clave, d) {
     ["subscription_data[trial_period_days]", "30"],
     ["subscription_data[metadata][que]", "suscripcion"], ["subscription_data[metadata][suscripcion]", reg.id],
     ["subscription_data[description]", ("La Carta C1 · $" + SUSCRIPCION.mensual + "/mes · " + reg.negocio).slice(0, 120)],
-    ["metadata[que]", "suscripcion"], ["metadata[suscripcion]", reg.id], ["metadata[efectivo]", efectivo ? "1" : "0"],
+    ["metadata[que]", "suscripcion"], ["metadata[suscripcion]", reg.id], ["metadata[efectivo]", d && d.efectivo ? "1" : "0"], ["metadata[enganche]", reg.enganche_aparte ? "aparte" : ""],
     ["payment_method_types[0]", "card"],
     ["success_url", base + "/comprar?pago=suscrito"], ["cancel_url", base + "/comprar?pago=no"]
   ];
@@ -35753,8 +35753,63 @@ async function kitSuscribirStripe(env, clave, d) {
   if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
   reg.estado = "stripe_abierto"; reg.enganche = efectivo ? "efectivo" : "stripe";
   await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
-  if (efectivo) await avisaEdsiRed(env, "\u{1F4B3} <b>" + reg.negocio + "</b> va a activar su pago de $" + SUSCRIPCION.mensual + " al mes con Stripe.\n⚠️ Dijo que el ENGANCHE lo pagó EN EFECTIVO con el vendedor " + (reg.vendedor || "") + ". Confírmalo.");
+  if (d && d.efectivo) await avisaEdsiRed(env, "\u{1F4B3} <b>" + reg.negocio + "</b> va a activar su pago de $" + SUSCRIPCION.mensual + " al mes con Stripe.\n⚠️ Dijo que el ENGANCHE lo pagó EN EFECTIVO con el vendedor " + (reg.vendedor || "") + ". Confírmalo.");
   return { ok: true, tipo: "kit_suscribir_stripe", liga };
+}
+/* EL ENGANCHE APARTE: tarjeta, OXXO o transferencia. */
+async function kitEngancheStripe(env, clave, d) {
+  if (!hayStripe(env)) throw new Error("todavía no se puede pagar así");
+  const reg = await leeSuscripcion(env, d.id);
+  if (reg.stripe_sub) throw new Error("esa suscripción ya está activa");
+  const base = origenPublico("", String(d && d.__origen || ""));
+  const cli = await stripePide(env, "POST", "/v1/customers", [
+    ["description", "Enganche La Carta · " + reg.negocio], ["name", String(reg.dueno || "").slice(0, 60)],
+    ["email", reg.correo], ["metadata[suscripcion]", reg.id]
+  ], "eng-cli-" + reg.id);
+  if (!/^cus_/.test(String(cli.id || ""))) throw new Error("Stripe no abrió la cuenta del cliente");
+  const ses = await stripeSesionPago(env, [
+    ["mode", "payment"], ["customer", cli.id], ["client_reference_id", reg.id], ["locale", "es-419"],
+    ["line_items[0][quantity]", "1"],
+    ["line_items[0][price_data][currency]", "mxn"],
+    ["line_items[0][price_data][unit_amount]", String(SUSCRIPCION.enganche * 100)],
+    ["line_items[0][price_data][product_data][name]", "La Carta · Comandero C1 · enganche"],
+    ["line_items[0][price_data][product_data][description]", "Impresora, rollos, códigos QR y 300 pláticas con Beto. Después, $" + SUSCRIPCION.mensual + " al mes con tarjeta. Por ahora no emitimos factura."],
+    ["metadata[que]", "enganche"], ["metadata[suscripcion]", reg.id],
+    ["payment_intent_data[metadata][que]", "enganche"], ["payment_intent_data[metadata][suscripcion]", reg.id],
+    ["success_url", base + "/comprar?paso=mensual&r=" + reg.id + "&eng=stripe"], ["cancel_url", base + "/comprar?pago=no"],
+    ["payment_method_types[0]", "card"], ["payment_method_types[1]", "oxxo"], ["payment_method_types[2]", "customer_balance"],
+    ["payment_method_options[oxxo][expires_after_days]", "3"],
+    ["payment_method_options[customer_balance][funding_type]", "bank_transfer"],
+    ["payment_method_options[customer_balance][bank_transfer][type]", "mx_bank_transfer"]
+  ], "eng-" + reg.id + "-" + Math.floor(Date.now() / 6e4));
+  const liga = String(ses.url || "");
+  if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
+  reg.enganche_aparte = true; reg.enganche = "stripe";
+  await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
+  return { ok: true, tipo: "kit_enganche_stripe", liga };
+}
+async function stripeEngancheAviso(env, tipo, o, prueba) {
+  const md = o.metadata || {};
+  const id = String(md.suscripcion || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  const reg = id ? await stripeLee(env, "suscripciones/" + id + ".json") : null;
+  const quien = reg ? reg.negocio + " — " + reg.dueno + "\nTel: " + reg.telefono + (reg.vendedor ? "\nVendedor: " + reg.vendedor : "") : "(no encontré la suscripción " + id + ")";
+  let estado = "";
+  if (tipo === "checkout.session.completed") estado = o.payment_status === "paid" ? "pagado" : "esperando";
+  if (tipo === "checkout.session.async_payment_succeeded") estado = "pagado";
+  if (tipo === "checkout.session.async_payment_failed") estado = "vencio";
+  if (!estado) return { enganche: "nada", evento: tipo };
+  if (estado === "pagado" && !(Number(o.amount_total) === SUSCRIPCION.enganche * 100 && String(o.currency || "").toLowerCase() === "mxn")) estado = "revisar";
+  if (reg) {
+    if (reg.enganche_pagado && estado !== "pagado") return { enganche: "ya_pagado" };
+    if (estado === "pagado" && reg.enganche_pagado) return { enganche: "ya_pagado" };
+    reg["enganche_" + estado] = isoMX();
+    await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
+  }
+  if (estado === "pagado") await avisaEdsiRed(env, "\u{1F4B5} <b>Pagaron el enganche: $" + SUSCRIPCION.enganche.toLocaleString("en-US") + "</b>" + prueba + "\n" + quien + "\nFalta que active su pago de $" + SUSCRIPCION.mensual + " al mes.");
+  if (estado === "esperando") await avisaEdsiRed(env, "\u{1F9FE} <b>Sacaron ficha para el enganche</b> (OXXO o transferencia)" + prueba + "\n" + quien + "\nTodavía no paga.");
+  if (estado === "vencio") await avisaEdsiRed(env, "⌛ <b>Venció la ficha del enganche sin pagar</b>" + prueba + "\n" + quien);
+  if (estado === "revisar") await avisaEdsiRed(env, "⚠️ <b>Enganche con monto raro</b>" + prueba + ": $" + (Number(o.amount_total) / 100) + "\n" + quien + "\nRevísalo en Stripe.");
+  return { enganche: estado };
 }
 /* De que suscripcion es un aviso de Stripe. */
 async function stripeRegDeSub(env, sub) {
@@ -35775,7 +35830,7 @@ async function stripeSuscripcionAviso(env, tipo, o, prueba) {
     await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
     await stripeGuarda(env, "stripe/subs/" + sub + ".json", { id: reg.id });
     await avisaEdsiRed(env, "✅ <b>Suscripción nueva por Stripe</b>" + prueba + "\n" + reg.negocio + " — " + reg.dueno + "\nTel: " + reg.telefono +
-      (reg.vendedor ? "\nVendedor: " + reg.vendedor : "") + "\nEnganche: " + (md.efectivo === "1" ? "EN EFECTIVO (confírmalo)" : "$" + SUSCRIPCION.enganche + " pagado con tarjeta") +
+      (reg.vendedor ? "\nVendedor: " + reg.vendedor : "") + "\nEnganche: " + (md.efectivo === "1" ? "EN EFECTIVO (confírmalo)" : md.enganche === "aparte" ? "pagado aparte por Stripe (OXXO, transferencia o tarjeta; revisa el aviso del enganche)" : "$" + SUSCRIPCION.enganche + " pagado con tarjeta") +
       "\n$" + SUSCRIPCION.mensual + " al mes a partir de dentro de 30 días.\nDalo de alta en /socio con ese mismo teléfono.");
     return { suscripcion: "activa", id: reg.id };
   }
@@ -35872,6 +35927,9 @@ async function stripeProcesa(env, ev) {
   if ((tipo === "checkout.session.completed" && md.que === "suscripcion") || tipo === "invoice.paid" || tipo === "invoice.payment_failed" ||
       tipo === "customer.subscription.updated" || tipo === "customer.subscription.deleted") {
     return await stripeSuscripcionAviso(env, tipo, o, prueba);
+  }
+  if (tipo.indexOf("checkout.session.") === 0 && md.que === "enganche") {
+    return await stripeEngancheAviso(env, tipo, o, prueba);
   }
   if (tipo.indexOf("checkout.session.") === 0 && md.que === "tanque") {
     const pagado = (tipo === "checkout.session.completed" && o.payment_status === "paid") || tipo === "checkout.session.async_payment_succeeded";
@@ -36675,6 +36733,7 @@ var ESCRITURAS = {
   kit_enganche: kitEnganche,
   kit_mensual: kitMensual,
   kit_suscribir_stripe: kitSuscribirStripe,
+  kit_enganche_stripe: kitEngancheStripe,
   suscripciones_revisar: suscripcionesRevisar,
   recargas_nuevas: recargasNuevas,
   promotor_cobro: promotorCobro,
@@ -37032,7 +37091,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.36";  // version: "2.9.36"
+var VERSION_BETO = "2.9.37";  // version: "2.9.37"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -38235,6 +38294,7 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 <input style="width:100%;margin:0 0 9px;padding:13px 14px;border-radius:11px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;font-size:15px;font-family:inherit" id="sTel" placeholder="Tu tel&eacute;fono (10 n&uacute;meros)" inputmode="tel">
 <input style="width:100%;margin:0 0 9px;padding:13px 14px;border-radius:11px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;font-size:15px;font-family:inherit" id="sCor" placeholder="Tu correo (ah&iacute; te llega el recibo)" inputmode="email">
 <button class="plazo" id="sEng"><span class="mes">Pagar el enganche</span><span class="cuota"><b>$1,300</b><span>tarjeta u OXXO</span></span></button>
+<button class="plazo" id="sOxxo" style="display:none"><span class="mes">Enganche en OXXO o transferencia</span><span class="cuota"><b>$1,300</b><span>y luego $400 al mes con tarjeta</span></span></button>
 <button class="plazo" id="sEfe" style="border-style:dashed"><span class="mes">Ya pagu&eacute; el enganche en efectivo</span></button>
 </div>
 <div id="sMes" style="display:none">
@@ -38290,11 +38350,13 @@ var botones = document.querySelectorAll('.plazo[data-meses]');
   var SUS_STRIPE = !!document.getElementById('bContado');
   if (SUS_STRIPE) {
     var sp = document.querySelector('#sEng .cuota span'); if (sp) sp.textContent = 'y $400 al mes, con tarjeta';
+    $s('sOxxo').style.display = 'flex';
   }
   if (qs.get('paso') === 'mensual' && idS) {
     $s('sDatos').style.display = 'none'; $s('sMes').style.display = 'block';
     $s('suscr').scrollIntoView();
     if (qs.get('eng') === 'pendiente') avisa('Tu enganche qued&oacute; en proceso (OXXO). Ya puedes activar tu pago mensual.', true);
+    else if (qs.get('eng') === 'stripe') avisa('Si pagaste el enganche con tarjeta, ya entr&oacute;. Si sacaste ficha de OXXO o transferencia, p&aacute;gala en los pr&oacute;ximos 3 d&iacute;as. <b>Ahora activa tu pago de $400 al mes.</b>', true);
     else avisa('<b>Tu enganche entr&oacute;.</b> Falta un paso: activa tu pago mensual.', true);
   }
   function mensual(efectivo, b){
@@ -38315,6 +38377,14 @@ var botones = document.querySelectorAll('.plazo[data-meses]');
   $s('sEng').onclick = function(){
     datos(function(b, antes){
       pideS(SUS_STRIPE ? 'kit_suscribir_stripe' : 'kit_enganche', { id: idS }).then(function(r){
+        if (r && r.ok && r.liga) { location.href = r.liga; return; }
+        b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo abrir el pago.');
+      });
+    }, this);
+  };
+  $s('sOxxo').onclick = function(){
+    datos(function(b, antes){
+      pideS('kit_enganche_stripe', { id: idS }).then(function(r){
         if (r && r.ok && r.liga) { location.href = r.liga; return; }
         b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo abrir el pago.');
       });
