@@ -36373,6 +36373,10 @@ var SOPORTE_BASE = [
   { c: ["!dificil", "!instalar", "!configurar", "cuanto tarda"], r: "Se pone en unos 10 minutos. La pantalla lo va llevando paso a paso." },
   { c: ["no sabe usar", "no usa celular", "!viejitos", "llamar al mesero", "!mesero"], r: "El cliente que no quiere usar el celular le pide al mesero como siempre. Nadie está obligado. Y desde la mesa también puede tocar 'Que venga el mesero' y al mesero le llega el aviso." },
   { c: ["!beto", "!domicilio", "!platicas", "desde su casa"], r: "Beto es el que contesta por chat a los que piden DESDE SU CASA. No aparece en la mesa: en la mesa el cliente toca su menú y ya. Trae 300 pláticas incluidas; la recarga son 300 más por $100." },
+  { c: ["!devolver", "!devolucion", "!devoluciones", "!reembolso", "no me gusta", "!arrepiento", "me arrepiento", "regresar la caja", "regresan mi dinero"], r: "Si la caja llega dañada o la impresora no funciona al instalarla, se cambia sin costo. Si el dueño se arrepiente, puede devolver la caja completa y sin daños dentro de los 5 días hábiles siguientes a la instalación, y se le regresa lo que pagó menos la comisión que cobró el banco o la tienda. Las recargas de Beto que ya se usaron no se devuelven. Todo está en lacartamenu.com/terminos." },
+  { c: ["!iva", "mas iva", "con iva", "impuestos"], r: "Se cobra exactamente el precio publicado: no se agrega IVA ni nada al pagar. Por ahora no se emite factura." },
+  { c: ["se cae", "no funciona el sistema", "!falla", "sin servicio"], r: "Si el sistema falla, los clientes pueden pedirle al mesero como siempre. Si la falla es de La Carta y dura más de un día, se le repone ese tiempo de servicio." },
+  { c: ["!terminos", "!condiciones", "!contrato"], r: "Los términos y condiciones están en lacartamenu.com/terminos y el aviso de privacidad en lacartamenu.com/privacidad." },
   { c: ["!factura", "!facturas", "!cfdi", "!fiscal"], r: "No. El sistema no hace facturas ni CFDI. Los tickets son informativos, no fiscales." },
   { c: ["varios dias", "!hotel", "!huesped", "!huespedes", "se quedan", "cuenta abierta", "otro dia"], r: "Hoy NO: la cuenta abierta dura el día. La caja junta lo que la mesa pidió hoy; si el cliente regresa otro día, lo de ayer ya no aparece en la caja. Edsi ya está trabajando en la cuenta que se queda abierta varios días. No lo prometas todavía." },
   { c: ["!separar", "!separadas", "!dividir", "cada quien"], r: "Todavía no desde la pantalla: la caja cobra la mesa completa. Separar cuentas está en construcción. No lo prometas todavía." },
@@ -37091,7 +37095,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.38";  // version: "2.9.38"
+var VERSION_BETO = "2.9.39";  // version: "2.9.39"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
