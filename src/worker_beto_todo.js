@@ -38397,7 +38397,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.46";  // version: "2.9.46"
+var VERSION_BETO = "2.9.47";  // version: "2.9.47"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39336,7 +39336,7 @@ footer .ancho{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px
 
 <footer><div class="ancho">
 <div>La Carta &middot; Comandero C1 &middot; Manzanillo, Colima, M&eacute;xico</div>
-<div><a href="/pregunta">Preguntas</a> &middot; <a href="/comprar">Comprar</a> &middot; <a href="/terminos">T&eacute;rminos y condiciones</a> &middot; <a href="/privacidad">Aviso de privacidad</a> &middot; privacidad@lacartamenu.com</div>
+<div><a href="/ayuda"><b>&iquest;Ya tienes tu kit? Ayuda</b></a> &middot; <a href="/pregunta">Preguntas</a> &middot; <a href="/comprar">Comprar</a> &middot; <a href="/terminos">T&eacute;rminos y condiciones</a> &middot; <a href="/privacidad">Aviso de privacidad</a> &middot; privacidad@lacartamenu.com</div>
 </div></footer>
 <script>
 (function(){
@@ -39630,6 +39630,87 @@ li{margin-bottom:5px}
 <h2>8. Si cambiamos este aviso</h2>
 <p>Lo publicamos en esta misma p&aacute;gina, <b>lacartamenu.com/privacidad</b>, con la fecha nueva arriba.</p>
 </div></body></html>`;
+var HTML_AYUDA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ayuda con tu kit &middot; La Carta</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#0e1113;color:#f2f4f6;
+  font-family:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+.tapa{max-width:460px;margin:0 auto;padding:26px 18px 50px}
+.marca{font-size:19px;font-weight:900;letter-spacing:2.6px}
+.marca small{display:block;font-size:10.5px;font-weight:800;letter-spacing:2px;color:#8b959e;margin-top:2px}
+h1{font-size:26px;line-height:1.18;margin:24px 0 10px;font-weight:900}
+.baja{font-size:15.5px;line-height:1.55;color:#c2cad1;margin:0 0 20px}
+.caja{background:#1b2126;border:1px solid #2b333a;border-radius:14px;padding:16px;margin-bottom:14px}
+.caja b.t{display:block;font-size:16.5px;margin-bottom:6px}
+.caja p{margin:0 0 10px;font-size:14.5px;line-height:1.5;color:#c2cad1}
+.btn{display:block;width:100%;text-align:center;text-decoration:none;border:0;border-radius:12px;padding:14px;
+  font-size:16px;font-weight:800;font-family:inherit;cursor:pointer;background:#8fd6ac;color:#0e1113;margin-top:8px}
+.btn.gris{background:#2a3238;color:#f2f4f6}
+.campo{width:100%;padding:14px;border-radius:11px;border:1.5px solid #2f3a41;background:#11161a;color:#f2f4f6;
+  font-size:20px;font-weight:800;letter-spacing:3px;text-transform:uppercase;font-family:inherit}
+.msg{display:none;margin-top:10px;padding:11px 12px;border-radius:10px;background:#3a1e1e;color:#ffc9c9;font-size:14px}
+.msg.on{display:block}
+.pie{margin-top:26px;padding-top:15px;border-top:1px solid #232a30;font-size:12.5px;line-height:1.55;color:#78838f}
+.pie a{color:#8fd6ac}
+</style></head><body><div class="tapa">
+<div class="marca">LA CARTA<small>COMANDERO C1</small></div>
+<h1>Ayuda con tu kit</h1>
+<p class="baja">&iquest;Perdiste el papel o se despint&oacute; un c&oacute;digo? Aqu&iacute; est&aacute; todo lo que traen los QR de tu instructivo.</p>
+
+<div class="caja">
+<b class="t">El c&oacute;digo de tu kit</b>
+<p>Viene debajo del QR grande del instructivo (lacartamenu.com/k/<b>CODIGO</b>), en el papelito &laquo;Tu c&oacute;digo para activar&raquo; y debajo del QR de la p&oacute;liza. Son 6 letras y n&uacute;meros.</p>
+<input class="campo" id="cod" maxlength="8" placeholder="Ej. 7KQ3MX" autocomplete="off" autocapitalize="characters">
+<a class="btn" id="bAct" href="#">Activar mi kit</a>
+<a class="btn gris" id="bRe" href="#">Reimprimir instructivo, p&oacute;liza y c&oacute;digos de mesa</a>
+<div class="msg" id="m"></div>
+<p style="margin:12px 0 0;font-size:13.5px;color:#98a2ab">Para reimprimir, &aacute;brelo en el celular Android que usa la impresora. Si no encuentras tu c&oacute;digo, <a href="/pregunta" style="color:#8fd6ac">preg&uacute;ntanos</a>.</p>
+</div>
+
+<div class="caja">
+<b class="t">&iquest;Ya lo tienes funcionando?</b>
+<p>Entra a tu negocio con tu clave y tu NIP.</p>
+<a class="btn" href="/casa">Entrar a mi negocio</a>
+</div>
+
+<div class="caja">
+<b class="t">La impresora</b>
+<p>Paso por paso, con foto, para conectarla la primera vez.</p>
+<a class="btn" href="/impresora">Gu&iacute;a de la impresora</a>
+<a class="btn gris" href="/bluetooth">Probar si la impresora conecta</a>
+</div>
+
+<div class="caja">
+<b class="t">Todas las gu&iacute;as, con fotos</b>
+<p>La cocina, la caja, el TPV, los cortes, el papel y Beto.</p>
+<a class="btn" href="/guias">Ver las gu&iacute;as</a>
+</div>
+
+<div class="caja">
+<b class="t">&iquest;Sigues atorado?</b>
+<p>Preg&uacute;ntanos lo que sea. Si no se resuelve ah&iacute;, te contesta Edsi.</p>
+<a class="btn gris" href="/pregunta">Preguntar</a>
+</div>
+
+<div class="pie">Funciona con tel&eacute;fono o tableta Android. No es compatible con iPhone ni iPad.<br>
+<a href="/">lacartamenu.com</a> &middot; <a href="/terminos">T&eacute;rminos</a> &middot; <a href="/privacidad">Aviso de privacidad</a></div>
+</div>
+<script>
+(function(){
+  var c = document.getElementById('cod'), m = document.getElementById('m');
+  function codigo(){
+    var v = String(c.value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (v.length < 4) { m.className = 'msg on'; m.textContent = 'Escribe el código de tu kit: viene debajo del QR grande del instructivo.'; c.focus(); return ''; }
+    m.className = 'msg'; return v;
+  }
+  document.getElementById('bAct').onclick = function(e){ e.preventDefault(); var v = codigo(); if (v) location.href = '/k/' + v; };
+  document.getElementById('bRe').onclick = function(e){ e.preventDefault(); var v = codigo(); if (v) location.href = '/kitpapel?k=' + v; };
+})();
+</script>
+</body></html>`;
+
 var HTML_COMPRA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>La Carta &middot; Comandero C1</title>
@@ -40710,7 +40791,7 @@ window.IMPRESORA_WEB = (function(){
 var ABC_KIT = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 var CODIGO = "", DOMINIO = "lacartamenu.com";
 var POLIZA = [["#", "PÓLIZA DE GARANTÍA"], ["=", "LA CARTA · COMANDERO C1"], ["-", ""], ["*", "PRODUCTO"], [".", "Kit de comandas por código QR «Comandero C1»: impresora térmica inalámbrica Bluetooth con su funda, rollos de papel térmico 57 x 30, cable con adaptador, tarjetas QR y esta póliza."], ["*", "MARCA Y MODELO"], [".", "Impresora HSTEM, modelo PT-210. Entrada DC 5 V 2 A. Batería 7.4 V 1500 mAh."], [".", "Fabricante: Guangzhou HongChuangBo Trading Co., Ltd. Habitación 522, No. 69 Zengcheng Avenue, Licheng Street, Zengcheng District, Guangzhou, China, C.P. 511300. Hecho en China."], ["_", "No. de serie"], ["n", "(los cuatro del final del nombre Bluetooth)"], ["_", "Fecha de entrega"], ["_", "Nombre del cliente"], ["-", ""], ["*", "DISTRIBUIDOR RESPONSABLE"], ["d", ""], ["-", ""], ["*", "1. QUÉ CUBRE Y POR CUÁNTO TIEMPO"], [".", "3 (tres) meses a partir de la fecha de entrega, contra defectos de fabricación, piezas y mano de obra. La batería recargable queda cubierta los mismos 3 meses."], ["*", "2. CÓMO SE HACE VÁLIDA"], [".", "Presentando esta póliza sellada o el comprobante de compra, en el domicilio del distribuidor o al teléfono de arriba. Los gastos de transporte de esta garantía corren por cuenta del distribuidor."], ["*", "3. TIEMPO DE REPARACIÓN"], [".", "Máximo 30 días naturales desde que se recibe. Si no se puede reparar, se repone por uno equivalente o se devuelve el importe, a elección del cliente."], ["*", "4. REFACCIONES Y SERVICIO"], [".", "Rollos de papel térmico 57 x 30 mm y cable de carga, en el domicilio y teléfono de arriba."], ["*", "5. QUÉ NO CUBRE"], [".", "· Caída, golpe, agua, humedad, calor excesivo o sol."], [".", "· Cargador distinto al de 5 V 2 A, cargarla fuera de 5 a 35 °C, o papel que no sea térmico de 57 x 30 mm."], [".", "· Equipo abierto, alterado o reparado por persona no autorizada."], [".", "· Que el papel impreso se decolore con el calor y el sol: no es defecto del equipo."], [".", "· El internet, el teléfono del cliente y las aplicaciones de terceros."], [".", "· Las pláticas de Beto: son un servicio en línea, no parte del equipo. El kit trae 300; las recargas van aparte."], ["*", "6. AVISO IMPORTANTE"], [".", "Funciona con teléfono o tableta ANDROID. No es compatible con iPhone ni iPad. Los tickets que imprime son informativos y NO son comprobantes fiscales."], ["-", ""], ["*", "PARA REIMPRIMIR ESTE PAPEL"], [".", "Escanea con el celular Android que usa la impresora. Ahí salen otra vez el instructivo, la póliza y los códigos de mesa para el rollo adhesivo, con el MISMO código de tu kit. No toques «Sacar otro código»: si lo cambias, los códigos de mesa que imprimas ya no abren tu menú."], ["q", "/kitpapel?k={{KIT}}"], ["-", ""], ["*", "7. ACUSE DE RECIBO"], [".", "Recibí el equipo completo, sus tarjetas QR y esta póliza. Me explicaron cómo se instala y cómo se usa, y quedé enterado de que funciona con Android y de que los tickets no son comprobantes fiscales."], ["f", "Nombre y firma del cliente"], ["f", "Sello y firma del distribuidor"], ["=", "Ley Federal de Protección al Consumidor"]];
-var INSTRU = [["#", "INSTRUCTIVO"], ["=", "LA CARTA · COMANDERO C1"], ["-", ""], [".", "Son diez minutos, una sola vez."], ["-", ""], ["*", "INICIO RÁPIDO · ACTIVA TU KIT"], [".", "Apunta la cámara de tu teléfono a este cuadro. Se abre tu pantalla de activación y de ahí te lleva de la mano. Es el primer paso y no se salta."], ["q", "/k/{{KIT}}", 300], ["!", "FUNCIONA CON TELÉFONO O TABLETA ANDROID. No es compatible con iPhone ni iPad."], ["-", ""], ["*", "1. REVISA QUE VENGA TODO"], [".", "La impresora en su funda, los rollos de papel (uno de ellos adhesivo), el cable con su adaptador y tus códigos QR. Tu impresora ya viene probada: la prendimos antes de entregarla."], ["*", "2. METE EL ROLLO"], [".", "El papel se desenrolla por arriba, hacia afuera. Deja asomar un dedo de papel y cierra la tapa hasta que truene. Si sale la hoja en blanco, el rollo está al revés: el papel térmico solo imprime de un lado. Lo volteas y ya."], ["*", "3. PRÉNDELA Y SACA SU TIRA"], [".", "Mantén apretado el botón derecho hasta que prenda la luz verde. Ahora apágala, mantén apretado el botón del papel y enciéndela sin soltarlo: sale sola una tira larga. GUARDA ESA TIRA: hasta arriba trae el nombre de Bluetooth de esta impresora."], ["*", "4. EMPAREJA EL TELÉFONO"], [".", "Ajustes · Bluetooth · Emparejar dispositivo nuevo. Con la impresora prendida aparece un nombre que empieza con PT-210 y termina en cuatro letras o números, por ejemplo PT-210_83C2. Esos cuatro cambian en cada impresora: es normal. Tócalo. Si te pide PIN, es 0000."], ["*", "5. CONÉCTALA DESDE LA COCINA"], [".", "En el teléfono o computadora que se queda en la cocina, abre tu pantalla de Cocina en Chrome y toca arriba el botón Conectar impresora. Escoge tu PT-210 en la lista."], ["!", "DESDE ESE MOMENTO CADA COMANDA SALE SOLA, sin picarle a nada. Es un toque al abrir el día."], ["*", "6. SI PREFIERES UN TOQUE POR PEDIDO: RawBT"], [".", "En Google Play instala RawBT. Engrane · AÑADIR IMPRESORA · Bluetooth. Sale un renglón rojo que dice «no seleccionado»: no es error, es el botón que abre la lista. Escoge tu PT-210 y antes de CONECTAR revisa: Conexión Bluetooth (no BLE), Controlador ESC/POS general, DPI 203, Área 384 puntos, y prende Establecer por defecto."], ["*", "7. PRUÉBALA"], [".", "Haz un pedido desde una mesa. Si conectaste desde la cocina, el papel sale solo. Si vas con RawBT, cada pedido trae su botón y sale de un toque."], ["-", ""], ["*", "TUS DATOS · GUARDA ESTA TIRA"], ["_", "La dirección de tu negocio"], ["_", "Tu clave"], ["_", "Tu NIP"], ["_", "Fecha de instalación"], [".", "El NIP es la llave de tu caja: con él se cobra, se cierra mesa y se saca el corte. No lo pegues en la pared."], ["-", ""], ["*", "EL DÍA A DÍA"], [".", "1. El cliente escanea con su cámara, ve tu menú de hoy y pide. No baja ninguna aplicación."], [".", "2. Sale la comanda sola, con el número de mesa. El teléfono suena cada vez que entra un pedido."], [".", "3. Cobras y cierras la mesa desde tu pantalla, con tu NIP."], [".", "4. El corte sale solo al final del día, del mes o del año. Tú no sumas nada."], ["-", ""], ["*", "BETO YA VIENE CONTIGO"], [".", "Beto es el que le contesta a los que piden desde su casa. En la mesa no aparece: ahí el cliente toca el menú y ya."], [".", "Tu caja trae 300 pláticas incluidas. No se vencen. Cuando se acaban, el negocio sigue igual de completo: lo único que deja de haber es quien conteste el chat."], [".", "Para recargar: en tu panel, Ver más · Beto que contesta. Son $100 por 300 pláticas."], ["-", ""], ["*", "CUIDADOS"], [".", "Rollos de repuesto: 57 x 30 mm térmico. Los de 57x40 y 57x50 no cierran la tapa."], [".", "No trae cortadora: el papel se rompe con la barrita de la tapa."], [".", "El papel térmico se borra con el calor y el sol. Por eso viene un rollo ADHESIVO: cuando un código de mesa se despinte, lo reimprimes y lo pegas encima."], ["-", ""], ["*", "TODAS LAS GUÍAS, CON FOTOS"], [".", "Ahí vienen con foto de cada pantalla: la cocina, la caja, el TPV, los cortes, el papel y Beto."], ["q", "/guias"], ["*", "LA GUÍA DE LA IMPRESORA"], [".", "Paso por paso, con foto, para conectarla la primera vez."], ["q", "/impresora"], ["-", ""], ["*", "PARA REIMPRIMIR ESTE PAPEL"], [".", "Escanea con el celular Android que usa la impresora. Ahí salen otra vez el instructivo, la póliza y los códigos de mesa para el rollo adhesivo, con el MISMO código de tu kit. No toques «Sacar otro código»: si lo cambias, los códigos de mesa que imprimas ya no abren tu menú."], ["q", "/kitpapel?k={{KIT}}"], ["-", ""], ["=", "LA CARTA · COMANDERO C1"], ["=", "lacartamenu.com"]];
+var INSTRU = [["#", "INSTRUCTIVO"], ["=", "LA CARTA · COMANDERO C1"], ["-", ""], [".", "Son diez minutos, una sola vez."], ["-", ""], ["*", "INICIO RÁPIDO · ACTIVA TU KIT"], [".", "Apunta la cámara de tu teléfono a este cuadro. Se abre tu pantalla de activación y de ahí te lleva de la mano. Es el primer paso y no se salta."], ["q", "/k/{{KIT}}", 300], ["!", "FUNCIONA CON TELÉFONO O TABLETA ANDROID. No es compatible con iPhone ni iPad."], ["-", ""], ["*", "1. REVISA QUE VENGA TODO"], [".", "La impresora en su funda, los rollos de papel (uno de ellos adhesivo), el cable con su adaptador y tus códigos QR. Tu impresora ya viene probada: la prendimos antes de entregarla."], ["*", "2. METE EL ROLLO"], [".", "El papel se desenrolla por arriba, hacia afuera. Deja asomar un dedo de papel y cierra la tapa hasta que truene. Si sale la hoja en blanco, el rollo está al revés: el papel térmico solo imprime de un lado. Lo volteas y ya."], ["*", "3. PRÉNDELA Y SACA SU TIRA"], [".", "Mantén apretado el botón derecho hasta que prenda la luz verde. Ahora apágala, mantén apretado el botón del papel y enciéndela sin soltarlo: sale sola una tira larga. GUARDA ESA TIRA: hasta arriba trae el nombre de Bluetooth de esta impresora."], ["*", "4. EMPAREJA EL TELÉFONO"], [".", "Ajustes · Bluetooth · Emparejar dispositivo nuevo. Con la impresora prendida aparece un nombre que empieza con PT-210 y termina en cuatro letras o números, por ejemplo PT-210_83C2. Esos cuatro cambian en cada impresora: es normal. Tócalo. Si te pide PIN, es 0000."], ["*", "5. CONÉCTALA DESDE LA COCINA"], [".", "En el teléfono o computadora que se queda en la cocina, abre tu pantalla de Cocina en Chrome y toca arriba el botón Conectar impresora. Escoge tu PT-210 en la lista."], ["!", "DESDE ESE MOMENTO CADA COMANDA SALE SOLA, sin picarle a nada. Es un toque al abrir el día."], ["*", "6. SI PREFIERES UN TOQUE POR PEDIDO: RawBT"], [".", "En Google Play instala RawBT. Engrane · AÑADIR IMPRESORA · Bluetooth. Sale un renglón rojo que dice «no seleccionado»: no es error, es el botón que abre la lista. Escoge tu PT-210 y antes de CONECTAR revisa: Conexión Bluetooth (no BLE), Controlador ESC/POS general, DPI 203, Área 384 puntos, y prende Establecer por defecto."], ["*", "7. PRUÉBALA"], [".", "Haz un pedido desde una mesa. Si conectaste desde la cocina, el papel sale solo. Si vas con RawBT, cada pedido trae su botón y sale de un toque."], ["-", ""], ["*", "TUS DATOS · GUARDA ESTA TIRA"], ["_", "La dirección de tu negocio"], ["_", "Tu clave"], ["_", "Tu NIP"], ["_", "Fecha de instalación"], [".", "El NIP es la llave de tu caja: con él se cobra, se cierra mesa y se saca el corte. No lo pegues en la pared."], ["-", ""], ["*", "EL DÍA A DÍA"], [".", "1. El cliente escanea con su cámara, ve tu menú de hoy y pide. No baja ninguna aplicación."], [".", "2. Sale la comanda sola, con el número de mesa. El teléfono suena cada vez que entra un pedido."], [".", "3. Cobras y cierras la mesa desde tu pantalla, con tu NIP."], [".", "4. El corte sale solo al final del día, del mes o del año. Tú no sumas nada."], ["-", ""], ["*", "BETO YA VIENE CONTIGO"], [".", "Beto es el que le contesta a los que piden desde su casa. En la mesa no aparece: ahí el cliente toca el menú y ya."], [".", "Tu caja trae 300 pláticas incluidas. No se vencen. Cuando se acaban, el negocio sigue igual de completo: lo único que deja de haber es quien conteste el chat."], [".", "Para recargar: en tu panel, Ver más · Beto que contesta. Son $100 por 300 pláticas."], ["-", ""], ["*", "CUIDADOS"], [".", "Rollos de repuesto: 57 x 30 mm térmico. Los de 57x40 y 57x50 no cierran la tapa."], [".", "No trae cortadora: el papel se rompe con la barrita de la tapa."], [".", "El papel térmico se borra con el calor y el sol. Por eso viene un rollo ADHESIVO: cuando un código de mesa se despinte, lo reimprimes y lo pegas encima."], ["-", ""], ["*", "TODAS LAS GUÍAS, CON FOTOS"], [".", "Ahí vienen con foto de cada pantalla: la cocina, la caja, el TPV, los cortes, el papel y Beto."], ["q", "/guias"], ["*", "LA GUÍA DE LA IMPRESORA"], [".", "Paso por paso, con foto, para conectarla la primera vez."], ["q", "/impresora"], ["-", ""], ["*", "PARA REIMPRIMIR ESTE PAPEL"], [".", "Escanea con el celular Android que usa la impresora. Ahí salen otra vez el instructivo, la póliza y los códigos de mesa para el rollo adhesivo, con el MISMO código de tu kit. No toques «Sacar otro código»: si lo cambias, los códigos de mesa que imprimas ya no abren tu menú."], ["q", "/kitpapel?k={{KIT}}"], ["-", ""], ["*", "SI PIERDES ESTE PAPEL"], [".", "Todo lo de estos QR está en lacartamenu.com/ayuda. Ten a la mano tu código: lo de después de /k/ en el QR grande."], ["-", ""], ["=", "LA CARTA · COMANDERO C1"], ["=", "lacartamenu.com"]];
 var VENDE = [["#", "PARA EL VENDEDOR"], ["=", "LA CARTA · COMANDERO C1"], ["-", ""], ["*", "LO QUE VENDES, EN UNA FRASE"], [".", "«Es un aparatito para que los clientes pidan desde su celular y la comanda salga sola en la cocina. No necesita computadora ni contratar a nadie.»"], ["*", "LAS TRES COSAS QUE HACE"], [".", "1. El cliente escanea un código en la mesa y pide solo."], [".", "2. El pedido sale impreso en la cocina, con el número de mesa."], [".", "3. El dueño cobra y saca su corte del día desde el celular."], ["-", ""], ["*", "TU REGLA DE ORO"], [".", "Si te preguntan algo que no sabes, NO INVENTES. Dices:"], ["!", "«Eso se lo confirmo con mi jefe ahorita mismo, ¿me da su WhatsApp?»"], [".", "Nadie te regaña por eso. Te regañan por prometer algo que no es."], ["-", ""], ["*", "LO QUE TE VAN A PREGUNTAR"], ["*", "¿Necesito internet?"], [".", "Sí. El WiFi del negocio o los datos del celular."], ["*", "¿Funciona con mi teléfono?"], [".", "Con Android sí. Con iPhone no."], ["*", "¿Hay que pagar cada mes?"], [".", "Como él quiera. Pago anual: $3,700 por un año, y se renueva cada año. O suscripción: $1,300 de enganche y $400 al mes. Si deja de pagar o no renueva, se queda con la impresora y el servicio se corta."], ["*", "¿Y si se descompone?"], [".", "Tiene 3 meses de garantía. Aquí viene el teléfono."], ["*", "¿Es difícil de poner?"], [".", "Diez minutos. La pantalla lo va llevando paso a paso."], ["*", "¿Y el cliente que no sabe usar el celular?"], [".", "Le pide al mesero como siempre. Nadie está obligado."], ["*", "¿Qué es eso de Beto?"], [".", "Es el que le contesta a los que piden desde su casa. Vienen 300 pláticas incluidas. Cuando se acaban, todo lo demás sigue igual."], ["*", "¿Cuánto cuesta?"], ["_", "Precio"], ["n", "(lo dice el jefe; no lo cambies ni des descuentos)"], ["-", ""], ["*", "SI NO TE CREEN"], [".", "No discutas. Que el señor apunte su cámara a este cuadro y vea el video. Convence mejor que tú y que yo."], ["q", "/video"], ["=", "LA CARTA · COMANDERO C1"]];
 var DISTRIB = ["EDSI FABIAN PEREZ JARAMILLO",
   "Calle Neptuno 229, Valle Esmeralda, Barrio 4, Manzanillo, Colima, C.P. 28219 \\u00b7 Tel. 314 133 2169"];
@@ -42066,6 +42147,12 @@ await chatAvisar(env, cfg,
     }
     if (ruta === "/bluetooth") {
       return new Response(HTML_BLUETOOTH, {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+      });
+    }
+    if (ruta === "/ayuda" || ruta === "/ayudakit") {
+      return new Response(HTML_AYUDA, {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
