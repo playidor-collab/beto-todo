@@ -37095,7 +37095,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.39";  // version: "2.9.39"
+var VERSION_BETO = "2.9.40";  // version: "2.9.40"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -38716,7 +38716,7 @@ var HTML_KITPAPEL = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
       <label for="mesas">Mesas</label>
       <input id="mesas" type="number" min="1" max="30" value="4" inputmode="numeric">
     </div>
-    <p class="nota">Ap&uacute;ntalo en tu hoja de control con el negocio al que se lo diste. Es tu inventario.</p>
+    <p class="nota">No hace falta apuntarlo: queda anotado solo en tu lista de cajas (lacartamenu.com/kits), con el negocio que lo active.</p>
   </div>
 
   <div class="caja">
@@ -39354,11 +39354,13 @@ var VENDE = [["#", "PARA EL VENDEDOR"], ["=", "LA CARTA · COMANDERO C1"], ["-",
 var DISTRIB = ["EDSI FABIAN PEREZ JARAMILLO",
   "Calle Neptuno 229, Valle de las Garzas, Manzanillo, Colima, C.P. 28219 \\u00b7 Tel. 314 133 2169"];
 
+/* Seis letras: con cajas mandadas a todo el pais, cuatro se pueden adivinar.
+   Las de cuatro que ya estan impresas siguen sirviendo. */
 function codigoNuevoKit(){
-  var s = "", r = new Uint32Array(4);
+  var s = "", r = new Uint32Array(6);
   if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(r);
-  else for (var j = 0; j < 4; j++) r[j] = Math.floor(Math.random() * 4294967296);
-  for (var i = 0; i < 4; i++) s += ABC_KIT.charAt(r[i] % ABC_KIT.length);
+  else for (var j = 0; j < 6; j++) r[j] = Math.floor(Math.random() * 4294967296);
+  for (var i = 0; i < 6; i++) s += ABC_KIT.charAt(r[i] % ABC_KIT.length);
   return s;
 }
 
@@ -39781,6 +39783,14 @@ input:focus{outline:2px solid #8fd6ac;outline-offset:1px}
   <button class="btn" id="bTarjOk">Ya las tengo &mdash; seguir</button>
 </div>
 
+<!-- ---------- 4. tu menu ---------- -->
+<div class="hoja" id="hMenu">
+  <p class="baja">Tus mesas ya abren <b>tu</b> men&uacute;, pero todav&iacute;a est&aacute; vac&iacute;o. No lo escribas: <b>t&oacute;male una foto</b> al de tu pared, tu cartulina o tu hoja, y yo lo leo con sus precios.</p>
+  <div class="ojo">Te va a pedir tus cuatro n&uacute;meros: son los que acabas de apuntar.</div>
+  <button class="btn" id="bMenuFoto">&#128247; Tomarle foto a mi men&uacute;</button>
+  <button class="btn claro" id="bMenuLuego">Lo hago despu&eacute;s</button>
+</div>
+
 <!-- ---------- la de siempre: ya tiene negocio ---------- -->
 <div class="hoja" id="hViejo">
   <label for="cl">Tu direcci&oacute;n</label>
@@ -40080,7 +40090,7 @@ function avisa(t, bien){ m.style.display = 'block'; m.className = 'msg' + (bien 
 /* Una hoja a la vez. El codigo del kit se esconde cuando ya cumplio: en la
    pantalla de sus datos lo unico que debe ver son SUS datos. */
 function ve(cual, titulo, baja, conKit){
-  var hojas = ['hEscoge','hNombre','hImpre','hTuyo','hTarj','hViejo'];
+  var hojas = ['hEscoge','hNombre','hImpre','hTuyo','hTarj','hMenu','hViejo'];
   for (var i = 0; i < hojas.length; i++) {
     $(hojas[i]).className = 'hoja' + (hojas[i] === cual ? ' on' : '');
   }
@@ -40222,6 +40232,14 @@ $('bSigue').onclick = function(){
 /* Y de aqui derecho a que le quede el icono en su pantalla. No se le manda
    al panel pelon: entraria esa vez y al dia siguiente andaria buscando. */
 $('bTarjOk').onclick = function(){
+  ve('hMenu', 'Falta lo m&aacute;s importante:<br>tu men&uacute;', null, false);
+};
+/* El negocio nace vacio: sin esto, el primer cliente que escanea la mesa ve
+   un menu sin platillos. El panel ya lee el menu de una foto (#pCarta). */
+$('bMenuFoto').onclick = function(){
+  location.href = '/panel?c=' + encodeURIComponent(MIO.clave) + '&d=casa#pCarta';
+};
+$('bMenuLuego').onclick = function(){
   location.href = '/ponerme?c=' + encodeURIComponent(MIO.clave) + '&r=panel';
 };
 
