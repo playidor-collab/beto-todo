@@ -36360,7 +36360,7 @@ function enviaSucursalDatos(b) {
 /* /envia-prueba: llamadas que NO cuestan, para ver que la llave sirve. */
 async function enviaPrueba(env) {
   if (!String(env.ENVIA_TOKEN || "").trim()) return { ok: false, motivo: "falta ENVIA_TOKEN" };
-  const ya = await stripeLee(env, "envia/prueba.json");
+  const ya = await stripeLee(env, "envia/prueba2.json");
   if (ya && Date.now() - Number(ya.ms || 0) < 10 * 6e4) return Object.assign({ guardada: true }, ya);
   const destino = { name: "Prueba", phone: "5500000000", street: "Calle Prueba", number: "1", district: "Juarez",
     city: "Ciudad de Mexico", state: "CX", country: "MX", postalCode: "06600", reference: "" };
@@ -36378,9 +36378,15 @@ async function enviaPrueba(env) {
     try { const b = await enviaSucursal(env, slug, cp, tipo); sal[nom] = b ? enviaSucursalDatos(b) : "no hay cerca"; }
     catch (e) { sal.errores[nom] = enviaMotivo(e); }
   }
+  for (const [nom, cp, tipo] of [["crudo_28219", ENVIA_ORIGEN.postalCode, 1], ["crudo_06600", "06600", 2]]) {
+    try {
+      const l = enviaLista(await enviaPide(env, ENVIA_QUERIES, "/branches/" + encodeURIComponent(slug) + "/MX?zipcode=" + cp + "&type=" + tipo + "&limitBranches=5"));
+      sal[nom] = { cuantas: l.length, primeras: l.slice(0, 3) };
+    } catch (e) { sal.errores[nom] = enviaMotivo(e); }
+  }
   sal.llave_aceptada = Object.keys(sal.tarifas).length > 0;
   if (!sal.llave_aceptada) sal.ok = false;
-  await stripeGuarda(env, "envia/prueba.json", sal);
+  await stripeGuarda(env, "envia/prueba2.json", sal);
   return sal;
 }
 async function enviaGuia(env, id, prueba) {
@@ -38424,7 +38430,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.50";  // version: "2.9.50"
+var VERSION_BETO = "2.9.51";  // version: "2.9.51"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
