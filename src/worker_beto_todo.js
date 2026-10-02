@@ -1895,6 +1895,9 @@ function pintar(filas){
     if (p.botana) h += '<div class="botana">' + esc(String(p.bebidas_mesa || 0)) + ' bebidas de la mesa &#183; le toca: <b>' + esc(p.botana) + '</b></div>';
     h += '<div><span class="etq' + (enCocina ? " cocinando" : "") + '">' + (PARA_MESERO ? (enCocina ? "Ya lo vi" : "Nuevo") : (enCocina ? "En cocina" : "Nuevo")) + '</span></div>';
     h += '<div class="que">' + esc(p.pedido) + '</div>';
+    if (String(p.pago || "") === "pagado" && String(p.pago_metodo || "").indexOf("Tarjeta en l") === 0) {
+      h += '<div class="quien">&#128179; Ya pagado con tarjeta</div>';
+    }
     if (llevar && p.cliente) {
       h += '<div class="quien">' + esc(p.cliente) + (p.telefono || p.tel_cliente ? " &middot; " + esc(p.telefono || p.tel_cliente) : "") + '</div>';
     }
@@ -2738,7 +2741,7 @@ function pintar(filas, mesas){
     h += '<div class="aviso">&#9888;&#65039; Aprieta el boton HASTA que veas el dinero en TU cuenta. Una captura de pantalla se puede inventar; tu saldo no. En cuanto aprietes, sale la comanda a cocina.</div>';
   }
   deben.forEach(function(p){
-    var via = p.pago_metodo === "liga" ? "Liga de pago" : "Transferencia";
+    var via = p.pago_metodo === "liga" ? "Liga de pago" : p.pago_metodo === "tarjeta" ? "Tarjeta (se confirma sola)" : "Transferencia";
     var tel = p.tel_cliente || p.telefono || "";
     h += '<article class="deuda">';
     h += '<div class="arr"><span class="etq">' + esc(via) + '</span>';
@@ -3514,6 +3517,100 @@ if (PIN) { puertasCaja(); arrancar(); } else puerta("");
 <\/script>
 </body>
 </html>`;
+var HTML_PAGADO = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#15181c">
+<title>Su pago</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0c0e10; color: #f4efe8; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 460px; margin: 0 auto; padding: 48px 20px 30px; text-align: center; }
+  .ic { font-size: 54px; line-height: 1; margin-bottom: 14px; }
+  h1 { font-size: 22px; margin: 0 0 10px; }
+  p { font-size: 15px; line-height: 1.5; opacity: .85; margin: 0 0 12px; }
+  .monto { font-size: 30px; font-weight: 800; margin: 6px 0 18px; }
+  .btn { display: inline-block; background: #d98324; color: #12100e; font-weight: 800; text-decoration: none;
+         border-radius: 12px; padding: 14px 22px; font-size: 16px; margin-top: 8px; }
+  .nota { font-size: 12px; opacity: .5; margin-top: 26px; }
+  .bien { color: #7ce4a8; }
+</style>
+</head>
+<body>
+<main>
+  <div class="ic" id="ic">&#9203;</div>
+  <h1 id="tit">Revisando su pago...</h1>
+  <div class="monto" id="monto"></div>
+  <p id="txt">No cierre esta p&aacute;gina, tarda unos segundos.</p>
+  <a class="btn" id="volver" href="#" style="display:none">Volver al men&uacute;</a>
+  <p class="nota">Documento sin valor fiscal.</p>
+</main>
+<script>
+(function(){
+  var q = new URLSearchParams(location.search);
+  var c = q.get("c") || "", r = q.get("r") || "";
+  var no = q.get("no") === "1";
+  var pid = q.get("payment_id") || q.get("collection_id") || "";
+  var sid = q.get("sid") || "";
+  var vueltas = 0;
+  function $(x){ return document.getElementById(x); }
+  function pesos(n){ return "$" + (Math.round(Number(n || 0) * 100) / 100).toFixed(2); }
+  function lugar(j){ return j.tipo === "mesa" ? "la cuenta de la mesa " + j.mesa : "su pedido " + (j.pedido || ""); }
+  function volver(j){
+    var v = String((j && j.vuelta) || "");
+    if (v.charAt(0) === "/" && v.charAt(1) !== "/") { $("volver").href = v; $("volver").style.display = "inline-block"; }
+  }
+  function pinta(j){
+    if (!j || j.ok === false) {
+      $("ic").innerHTML = "&#10067;";
+      $("tit").textContent = "No encontramos este cobro";
+      $("txt").textContent = "Si ya le cobraron, enséñele esta pantalla a quien le atiende.";
+      return;
+    }
+    volver(j);
+    $("monto").textContent = pesos(j.monto);
+    if (j.pagado) {
+      $("ic").innerHTML = "&#9989;";
+      $("tit").textContent = "¡Listo! Ya quedó pagado";
+      $("tit").className = "bien";
+      $("txt").textContent = (j.tipo === "mesa" ? "La cuenta de la mesa " + j.mesa + " ya está pagada. Gracias por su visita." :
+                              "Su pedido ya está pagado y va para la cocina.") + " Pagó con tarjeta por " + j.proveedor + ".";
+      return;
+    }
+    if (no) {
+      $("ic").innerHTML = "&#8617;&#65039;";
+      $("tit").textContent = "No se cobró nada";
+      $("txt").textContent = "Puede intentarlo otra vez desde el menú, o pagar en el mostrador.";
+      return;
+    }
+    if (vueltas < 40) {
+      $("txt").textContent = "Estamos confirmando el pago de " + lugar(j) + ". No cierre esta página.";
+      vueltas++;
+      setTimeout(revisa, 3000);
+      return;
+    }
+    $("ic").innerHTML = "&#9203;";
+    $("tit").textContent = "Su pago todavía no se confirma";
+    $("txt").textContent = "Si ya le cobraron, enséñele esta pantalla a quien le atiende. En cuanto se confirme, se marca solo.";
+  }
+  function revisa(){
+    var u = "/cobro/pago?c=" + encodeURIComponent(c) + "&r=" + encodeURIComponent(r);
+    if (pid && vueltas < 2) u += "&pid=" + encodeURIComponent(pid);
+    if (sid && vueltas < 2) u += "&sid=" + encodeURIComponent(sid);
+    fetch(u, { cache: "no-store" })
+      .then(function(x){ return x.json(); })
+      .then(pinta)
+      .catch(function(){ if (vueltas++ < 40) setTimeout(revisa, 3000); });
+  }
+  revisa();
+})();
+</script>
+</body>
+</html>
+`;
 var HTML_COBRO = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -3612,6 +3709,16 @@ var HTML_COBRO = `<!DOCTYPE html>
     <p class="pie">Sin el no se guarda nada. El cajero no entra aqui: la cuenta donde cae el dinero es tuya, no del turno.</p>
     <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="NIP">
     <button type="button" class="ancho" id="traer">Ver lo que ya tengo guardado</button>
+  </div>
+
+  <div class="caja" id="cajaTarjeta">
+    <h2>&#128179; Cobrar con tarjeta en tu men&uacute;</h2>
+    <p class="pie">Tus clientes pagan su cuenta con tarjeta desde su celular, y el pedido se marca pagado solo: nadie tiene que revisar capturas. <b>El dinero te llega directo a tu cuenta.</b> La Carta no cobra comisi&oacute;n: la &uacute;nica comisi&oacute;n es la de Mercado Pago o Stripe.</p>
+    <div class="pie" id="tarjetaEstado">Pon tu NIP y toca &laquo;Ver lo que ya tengo guardado&raquo;.</div>
+    <div class="pie" id="tarjetaDice" style="display:none;opacity:1;font-weight:700"></div>
+    <button type="button" class="ancho oculto" id="conectaMp">Conectar mi Mercado Pago</button>
+    <button type="button" class="ancho oculto" id="conectaStripe">Conectar mi Stripe</button>
+    <button type="button" class="ancho oculto" id="desconecta" style="background:var(--hueco);color:var(--papel);border:1px solid var(--linea)">Desconectar</button>
   </div>
 
   <div class="caja">
@@ -3762,6 +3869,7 @@ var HTML_COBRO = `<!DOCTYPE html>
             ". Dejala en blanco si no la vas a cambiar.";
           e.className = "guardado";
         }
+        tarjetaLee(pin);
         grita("Listo, ahi esta lo que tenias guardado.", true);
       })
       .catch(function () {
@@ -3814,6 +3922,106 @@ var HTML_COBRO = `<!DOCTYPE html>
         grita("Sin internet. Intenta otra vez.");
       });
   });
+
+  /* ---- cobrar con tarjeta en el menu ---- */
+  var qT = qs.get("tarjeta") || "";
+  var avisoTarjeta = "";
+  if (qT === "ok") avisoTarjeta = "Listo: ya quedó conectado. Desde ahorita tus clientes pueden pagar con tarjeta en tu menú.";
+  if (qT === "error") avisoTarjeta = "No se conectó: " + (qs.get("motivo") || "vuelve a intentarlo") + ".";
+  function tEsc(t) {
+    return String(t == null ? "" : t).replace(/[&<>"]/g, function (x) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[x];
+    });
+  }
+  function tLimpia(t) { return String(t || "").replace(/^Error: /, ""); }
+  function tdice(t, bien) {
+    var e = document.getElementById("tarjetaDice");
+    e.textContent = t || "";
+    e.style.color = bien ? "#7ce4a8" : "#ffb4ab";
+    e.style.display = t ? "block" : "none";
+  }
+  function tarjetaPinta(j) {
+    var est = document.getElementById("tarjetaEstado");
+    var bMp = document.getElementById("conectaMp");
+    var bSt = document.getElementById("conectaStripe");
+    var bNo = document.getElementById("desconecta");
+    bMp.className = "ancho oculto"; bSt.className = "ancho oculto"; bNo.className = "ancho oculto";
+    var c = j.conectado;
+    if (c && c.estado !== "se_desconecto") {
+      est.innerHTML = "&#9989; <b>Conectado con " + tEsc(c.nombre) + "</b>" +
+        (c.cuenta ? " (cuenta que termina en " + tEsc(c.cuenta) + ")" : "") +
+        (c.desde ? ", desde el " + tEsc(c.desde) : "") + "." +
+        (c.prueba ? " <b>Es de prueba:</b> todavía no cobra de verdad." : "") +
+        "<br>Tus clientes ya ven el botón <b>Pagar con tarjeta</b>.";
+      bNo.className = "ancho";
+      return;
+    }
+    if (c) {
+      est.innerHTML = "&#9888;&#65039; Tu " + tEsc(c.nombre) + " se desconectó. Conéctalo otra vez para seguir cobrando con tarjeta.";
+      bNo.className = "ancho";
+    } else {
+      est.textContent = "Todavía no tienes ninguno conectado. Escoge con cuál cobras:";
+    }
+    if (j.mp) bMp.className = "ancho";
+    if (j.stripe) bSt.className = "ancho";
+    if (!j.mp && !j.stripe && !c) est.textContent = "Esto todavía no está disponible para tu negocio.";
+  }
+  function tarjetaPide(tipo, datos) {
+    return fetch(base + "/beto-guarda", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clave: CLAVE, tipo: tipo, datos: datos })
+    }).then(function (r) { return r.json(); });
+  }
+  function tarjetaLee(pin) {
+    tarjetaPide("cobro_estado", { pin: pin })
+      .then(function (j) {
+        if (!j || j.ok === false) {
+          document.getElementById("tarjetaEstado").textContent = tLimpia(j && j.error) || "No pude ver cómo está.";
+          return;
+        }
+        tarjetaPinta(j);
+      })
+      .catch(function () { document.getElementById("tarjetaEstado").textContent = "Sin internet. Intenta otra vez."; });
+  }
+  function tarjetaConecta(prov, btn) {
+    var pin = document.getElementById("pin").value.trim();
+    if (!pin) { tdice("Escribe tu NIP de dueño arriba primero."); return; }
+    var antes = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Abriendo...";
+    tarjetaPide("cobro_conectar", { pin: pin, proveedor: prov })
+      .then(function (j) {
+        if (j && j.ok && j.liga) { location.href = j.liga; return; }
+        btn.disabled = false; btn.textContent = antes;
+        tdice(tLimpia(j && j.error) || "No se pudo abrir. Intenta otra vez.");
+      })
+      .catch(function () { btn.disabled = false; btn.textContent = antes; tdice("Sin internet. Intenta otra vez."); });
+  }
+  document.getElementById("conectaMp").addEventListener("click", function () { tarjetaConecta("mp", this); });
+  document.getElementById("conectaStripe").addEventListener("click", function () { tarjetaConecta("stripe", this); });
+  document.getElementById("desconecta").addEventListener("click", function () {
+    var btn = this;
+    var pin = document.getElementById("pin").value.trim();
+    if (!pin) { tdice("Escribe tu NIP de dueño arriba primero."); return; }
+    if (!window.confirm("¿Seguro? Tus clientes ya no van a poder pagar con tarjeta en tu menú.")) return;
+    btn.disabled = true;
+    tarjetaPide("cobro_desconectar", { pin: pin })
+      .then(function (j) {
+        btn.disabled = false;
+        if (!j || j.ok === false) { tdice(tLimpia(j && j.error) || "No se pudo desconectar."); return; }
+        tdice("Listo, ya se desconectó. " + (j.aviso || ""), true);
+        tarjetaLee(pin);
+      })
+      .catch(function () { btn.disabled = false; tdice("Sin internet. Intenta otra vez."); });
+  });
+  if (avisoTarjeta) tdice(avisoTarjeta, qT === "ok");
+  if (qs.get("ver") === "tarjeta") {
+    setTimeout(function () {
+      var c = document.getElementById("cajaTarjeta");
+      if (c && c.scrollIntoView) c.scrollIntoView();
+    }, 400);
+  }
 
   pintarModo();
 
@@ -4183,6 +4391,7 @@ var HTML_PANEL = `<!DOCTYPE html>
     <button class="sec" id="secLinks" data-va="pLinks"><span class="ico">🔗</span><span class="txt"><span class="n">Mis pantallas</span><span class="d">Cocina, mostrador, mesas</span></span><span class="fl">›</span></button>
     <button class="sec" id="secVer" data-va="pVer"><span class="ico">👁️</span><span class="txt"><span class="n">Qué veo al abrir</span><span class="d">Escoge las tarjetas de tu pantalla de hoy</span></span><span class="fl">›</span></button>
     <button class="sec" id="secCobro"><span class="ico">💳</span><span class="txt"><span class="n">Datos para cobrar</span><span class="d">A dónde cae el dinero del domicilio</span></span><span class="fl">›</span></button>
+    <button class="sec oculto" id="secTarjeta"><span class="ico">💳</span><span class="txt"><span class="n">Cobrar con tarjeta en tu menú</span><span class="d">Conecta tu Mercado Pago o tu Stripe. Sin comisión de La Carta</span></span><span class="fl">›</span></button>
     <button class="sec" id="secBeto" data-va="pBeto"><span class="ico">💬</span><span class="txt"><span class="n">Beto que contesta</span><span class="d">Tus pláticas, y cómo cargar más</span></span><span class="fl">›</span></button>
     <button class="sec" id="secGuias"><span class="ico">📚</span><span class="txt"><span class="n">Guías</span><span class="d">Cómo se usa cada pantalla, paso por paso</span></span><span class="fl">›</span></button>
 
@@ -4540,6 +4749,10 @@ $("bCierre").onclick = function(){ $("cMsg").classList.add("oculto"); abre("pCie
 /* Este mosaico no abre una hoja de aqui: se va a /cobro. Por eso no lleva
    data-va y trae su propia escucha. Y solo lo ve el dueno: mas abajo se le
    quita la puerta al cajero, igual que a los demas. */
+/* Cobrar con tarjeta: tambien vive en /cobro, en su propia caja. */
+$("secTarjeta").onclick = function(){
+  location.href = "/cobro?c=" + encodeURIComponent(CLAVE) + "&d=panel&ver=tarjeta";
+};
 $("secCobro").onclick = function(){
   location.href = "/cobro?c=" + encodeURIComponent(CLAVE) + "&d=panel";
 };
@@ -4936,6 +5149,7 @@ function armarMenu(){
      un estorbo. Ayer se escondio en la pantalla de Ajustes y aqui no: los
      dos lugares tienen que decir lo mismo. */
   if ($("secCobro") && !usaDe("domicilio")) $("secCobro").classList.add("oculto");
+  if ($("secTarjeta")) $("secTarjeta").classList.toggle("oculto", !(duenio && window.TARJETA_OFRECE));
 }
 
 /* ===================== como va el negocio =====================
@@ -5483,6 +5697,8 @@ function pintaBoca(){
   }
   pide("/negocio", {c: CLAVE}).then(function(r){
     var ch = (r && r.chat) || {};
+    window.TARJETA_OFRECE = !!(r && r.tarjeta_ofrece);
+    if ($("secTarjeta")) $("secTarjeta").classList.toggle("oculto", !(window.TARJETA_OFRECE && ROL === "dueno"));
     /* La caja de recargar se pinta igual en los tres estados: el que se quedo
        sin tanque la necesita, y el que todavia tiene tambien, porque nadie
        recarga cuando ya se quedo sin nada. */
@@ -21121,6 +21337,8 @@ var HTML_PIDE = `<!DOCTYPE html>
   </div>
   <div id="cuentaCuerpo"></div>
   <div id="pieCuenta" style="display:none">
+    <button class="grande" id="pagarTarjeta" style="display:none">&#128179; Pagar mi cuenta con tarjeta</button>
+    <div class="yavan" id="tarjetaDice" style="display:none"></div>
     <button class="grande" id="pedirCuenta">&#129309; Pedir la cuenta</button>
     <button class="chico" id="llamarMesero">&#128587; Que venga alguien a mi mesa</button>
     <div class="yavan" id="yaVan" style="display:none"></div>
@@ -21535,6 +21753,8 @@ function alPapel(liga){
     como: "mostrador",     /* mostrador | domicilio */
     domicilio: true,       /* si el negocio reparte a domicilio: lo dice el dueno */
     cobro: "",             /* "" | transferencia | liga | ambos: como cobra por adelantado */
+    tarjeta: "",           /* "" | mp | stripe: el negocio conecto su cobrador */
+    cuentaTotal: 0,
     pagarAntes: false,     /* el de mostrador que escogio pagar de una vez */
     mapa: "",              /* liga del punto que el cliente compartio */
     llamadas: [],          /* mesas que estan pidiendo algo (solo mesero) */
@@ -23008,9 +23228,9 @@ $("porCobrar").addEventListener("input", function(ev){
       }
       /* El de mostrador que escogio pagar de una vez. El de domicilio ya
          viene marcado desde pintaPago(): eso no se pregunta. */
-      if (estado.pagarAntes && estado.cobro) {
+      if (estado.pagarAntes && (estado.cobro || estado.tarjeta)) {
         datos.pagar_antes = "1";
-        datos.pago_metodo = (estado.cobro === "liga") ? "liga" : "transferencia";
+        datos.pago_metodo = !estado.cobro ? "tarjeta" : (estado.cobro === "liga") ? "liga" : "transferencia";
       } else if (datosExtra.como === "mostrador" && estado.pagaCon) {
         /* El del mostrador que paga al recoger tambien dice con que. */
         datos.pago_metodo = estado.pagaCon;
@@ -23135,6 +23355,14 @@ $("porCobrar").addEventListener("input", function(ev){
     if (!pagar || !(apartado || mesaTransfiere)) { caja.style.display = "none"; caja.innerHTML = ""; return; }
     var modo = String(pagar.modo || "");
     var h = "<h3>&#128179; " + (apartado ? "As&iacute; lo pagas" : "Para transferir") + "</h3>";
+    /* El negocio conecto su cobrador: un boton, y el pedido se marca pagado solo. */
+    if (pagar.tarjeta && apartado && estado.folio) {
+      h += '<button class="grande" id="pagaTarjeta" type="button">&#128179; Pagar con tarjeta</button>' +
+           '<p class="ojo" id="pagaTarjetaDice">Se abre la p&aacute;gina segura de ' +
+           (pagar.tarjeta === "mp" ? "Mercado Pago" : "Stripe") +
+           '. El dinero le llega directo al negocio y su pedido se confirma solo.</p>';
+      if (pagar.clabe || pagar.liga) h += '<p class="ojo">O si lo prefiere:</p>';
+    }
     if (pagar.liga && (modo === "liga" || modo === "ambos")) {
       h += '<a class="liga" href="' + esc(pagar.liga) + '" target="_blank" rel="noopener">Pagar en l&iacute;nea</a>';
     }
@@ -23233,6 +23461,33 @@ $("porCobrar").addEventListener("input", function(ev){
         });
     });
   }
+
+  /* PAGAR CON TARJETA. El servidor saca el monto de la tabla, nunca de aqui. */
+  function pagaConTarjeta(b, que, dice){
+    var antes = b.innerHTML;
+    b.disabled = true;
+    b.innerHTML = "Abriendo el cobro...";
+    que.vuelta = location.pathname + location.search;
+    habla("/beto-guarda", { clave: CLAVE, tipo: "cobro_tarjeta", datos: que })
+      .then(function(j){
+        if (j && j.ok && j.liga) { location.href = j.liga; return; }
+        b.disabled = false;
+        b.innerHTML = antes;
+        var t = (j && j.ya_pagado) ? "Esto ya está pagado." :
+                ((j && j.error) ? String(j.error).replace(/^Error: /, "") : "No se pudo abrir el cobro. Intente otra vez.");
+        if (dice) { dice.textContent = t; dice.style.display = "block"; }
+      })
+      .catch(function(){
+        b.disabled = false;
+        b.innerHTML = antes;
+        if (dice) { dice.textContent = "Sin señal. Intente otra vez."; dice.style.display = "block"; }
+      });
+  }
+  $("listoPaga").addEventListener("click", function(ev){
+    var b = ev.target.closest("#pagaTarjeta");
+    if (!b) return;
+    pagaConTarjeta(b, { id: estado.folio }, $("pagaTarjetaDice"));
+  });
 
   $("listoPaga").addEventListener("change", function(ev){
     var f = ev.target;
@@ -23379,7 +23634,7 @@ $("porCobrar").addEventListener("input", function(ev){
     }
     if (estado.como !== "domicilio" && $("camposDom")) $("camposDom").style.display = "none";
     var dom   = (estado.como === "domicilio");
-    var puede = !!estado.cobro;   /* el dueno ya cargo sus datos de cobro */
+    var puede = !!estado.cobro || !!estado.tarjeta;   /* datos de cobro, o tarjeta conectada */
     $("comoPagar").style.display = (!dom && puede) ? "block" : "none";
     if (!puede) estado.pagarAntes = false;
     if (dom) estado.pagarAntes = puede;   /* lo que sale a la calle se paga antes */
@@ -23560,6 +23815,9 @@ $("porCobrar").addEventListener("input", function(ev){
         if (MODO === "mesa") {
           $("pieCuenta").style.display = "block";
           pintaYaVan();
+          estado.cuentaTotal = Number(j.total) || 0;
+          $("pagarTarjeta").style.display = (estado.tarjeta && estado.cuentaTotal >= 10) ? "" : "none";
+          $("tarjetaDice").style.display = "none";
         } else if (MODO === "mesero") {
           preparaCobro(Number(j.total) || 0);
         }
@@ -23969,6 +24227,9 @@ $("porCobrar").addEventListener("input", function(ev){
     setTimeout(function(){ b.disabled = false; }, 20000);
   });
   $("pedirCuenta").addEventListener("click", function(){ pideAlgo("cuenta"); });
+  $("pagarTarjeta").addEventListener("click", function(){
+    pagaConTarjeta(this, { mesa: estado.mesa, total: estado.cuentaTotal }, $("tarjetaDice"));
+  });
   $("llamarMesero").addEventListener("click", function(){ pideAlgo("mesero"); });
 
   $("mesas").addEventListener("click", function(ev){
@@ -24053,6 +24314,8 @@ $("porCobrar").addEventListener("input", function(ev){
         /* Y como cobra por adelantado, para saber si la pantalla puede
            ofrecer "pagarlo ahora" o si nomas se paga al recogerlo. */
         if (j.cobro !== undefined && j.cobro !== null) estado.cobro = String(j.cobro || "");
+        /* Si conecto su Mercado Pago o su Stripe, se puede pagar con tarjeta aqui. */
+        estado.tarjeta = String(j.tarjeta || "");
         /* Lo que cobra de envio este negocio. Se guarda aunque sea cero: cero
            es "no cobra envio", y eso tambien hay que decirlo. */
         if (j.envio !== undefined && j.envio !== null) estado.envio = Number(j.envio) || 0;
@@ -28171,7 +28434,8 @@ async function guardarPedido(env, clave, d) {
   // Si el negocio todavia no carga sus datos de cobro, el pedido entra normal:
   // vale mas que pase a cocina a que se quede colgado esperando un pago que no
   // tiene a donde llegar.
-  const hayCobro = !!String(cfg.cobro_domicilio || "").trim();
+  const tarjetaCobro = await cobroPublico(env, clave);
+  const hayCobro = !!String(cfg.cobro_domicilio || "").trim() || !!tarjetaCobro;
   // El punto del mapa no es un campo aparte en la tabla: se pega a la
   // referencia. Asi con un solo cambio le llega a la cocina, a la caja, al
   // ticket y al que lo va a llevar, que es el unico que de veras lo necesita.
@@ -28305,7 +28569,7 @@ async function guardarPedido(env, clave, d) {
   const mesaTransfiere = !sinPagar && !aDomicilio &&
                          String(d.pago_metodo || "").trim().toLowerCase() === "transferencia";
   if (sinPagar || mesaTransfiere) {
-    const modoCobro = String(cfg.cobro_domicilio || "").trim();
+    const modoCobro = String(cfg.cobro_domicilio || "").trim() || (tarjetaCobro && sinPagar ? "tarjeta" : "");
     if (modoCobro) {
       pagar = {
         modo: modoCobro,
@@ -28323,6 +28587,7 @@ async function guardarPedido(env, clave, d) {
       };
     }
   }
+  if (pagar && sinPagar && tarjetaCobro && pedidoId != null) pagar.tarjeta = tarjetaCobro;
   let reparto = null;
   if (aDomicilio && estadoInicial === "cocina") {
     reparto = await avisarReparto(
@@ -36046,6 +36311,594 @@ async function kitMensual(env, clave, d) {
     (d.efectivo ? "\n⚠️ Dijo que el ENGANCHE lo pagó EN EFECTIVO con el vendedor " + (reg.vendedor || "") + ". Confírmalo." : ""));
   return { ok: true, tipo: "kit_mensual", liga: String(j.init_point) };
 }
+/* ---------------------------------------------------------------------------
+   COBRO CONECTADO POR RESTAURANTE. Cada negocio conecta SU Mercado Pago o SU
+   Stripe. El comensal paga con tarjeta y el dinero le cae directo al negocio:
+   La Carta no cobra comision ni toca el dinero. Los tokens de cada negocio
+   viven en R2, cifrados (AES-GCM, llave COBRO_LLAVE), y nunca salen a una
+   pantalla. Sin los secretos, nada de esto aparece y todo sigue como hoy. */
+var MP_AUTH_WEB = "https://auth.mercadopago.com/authorization";
+var STRIPE_CONNECT_WEB = "https://connect.stripe.com";
+var COBRO_BASE_FIJA = "https://lacartamenu.com";
+var COBRO_ESTADO_MIN = 15;
+var COBRO_RENUEVA_DIAS = 30;
+var COBRO_MINIMO = 10;
+function cobroBase(env) {
+  const b = String(env && env.COBRO_BASE || "").trim().replace(/\/+$/, "");
+  return /^https?:\/\/[A-Za-z0-9.:-]+$/.test(b) ? b : COBRO_BASE_FIJA;
+}
+function cobroLlaveOk(env) {
+  try { return atob(String(env && env.COBRO_LLAVE || "").trim()).length === 32; } catch (e) { return false; }
+}
+function cobroMpListo(env) {
+  return cobroLlaveOk(env) && /^[0-9]{5,25}$/.test(String(env.MP_APP_ID || "").trim()) && String(env.MP_APP_SECRET || "").trim().length >= 16;
+}
+function cobroStripeListo(env) {
+  return cobroLlaveOk(env) && /^ca_[A-Za-z0-9]{10,}$/.test(String(env.STRIPE_CONNECT_ID || "").trim()) &&
+    /^(sk|rk)_(test|live)_[A-Za-z0-9]{20,}$/.test(String(env.STRIPE_CONNECT_KEY || "").trim()) &&
+    /^whsec_[A-Za-z0-9]{20,}$/.test(String(env.STRIPE_CONNECT_FIRMA || "").trim());
+}
+function cobroStripeEnVivo(env) { return /^(sk|rk)_live_/.test(String(env.STRIPE_CONNECT_KEY || "").trim()); }
+function cobroParaNegocio(env, clave) {
+  const solo = String(env && env.COBRO_SOLO || "").toLowerCase().split(/[\s,]+/).filter(Boolean);
+  return !solo.length || solo.indexOf(String(clave || "").toLowerCase()) > -1;
+}
+function cobroClave(c) {
+  const x = String(c || "").trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{1,39}$/.test(x)) throw new Error("no encontré ese negocio");
+  return x;
+}
+function cobroNombre(prov) { return prov === "mp" ? "Mercado Pago" : "Stripe"; }
+function cobroAzar(n) {
+  return Array.from(crypto.getRandomValues(new Uint8Array(n)), (x) => x.toString(16).padStart(2, "0")).join("");
+}
+function cobroB64(bytes) {
+  const b = new Uint8Array(bytes);
+  let t = "";
+  for (let i = 0; i < b.length; i++) t += String.fromCharCode(b[i]);
+  return btoa(t);
+}
+function cobroDeB64(t) { return Uint8Array.from(atob(String(t || "")), (c) => c.charCodeAt(0)); }
+async function cobroLlave(env) {
+  return crypto.subtle.importKey("raw", cobroDeB64(String(env.COBRO_LLAVE).trim()), { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+async function cobroCifra(env, clave, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: new TextEncoder().encode("cobro|" + clave) },
+    await cobroLlave(env), new TextEncoder().encode(JSON.stringify(obj)));
+  return { v: 1, iv: cobroB64(iv), ct: cobroB64(ct) };
+}
+async function cobroDescifra(env, clave, sobre) {
+  if (!sobre || !sobre.iv || !sobre.ct) throw new Error("no hay datos guardados");
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: cobroDeB64(sobre.iv), additionalData: new TextEncoder().encode("cobro|" + clave) },
+    await cobroLlave(env), cobroDeB64(sobre.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function cobroLee(env, clave) {
+  let cual;
+  try { cual = cobroClave(clave); } catch (e) { return null; }
+  if (!env || !env.FOTOS) return null;
+  const r = await stripeLee(env, "_cobro/negocios/" + cual + ".json");
+  return r && (r.proveedor === "mp" || r.proveedor === "stripe") ? r : null;
+}
+async function cobroGuardaNegocio(env, clave, r) { await stripeGuarda(env, "_cobro/negocios/" + clave + ".json", r); }
+/* Lo unico que se dice en publico: con que se cobra aqui, o nada. */
+async function cobroPublico(env, clave) {
+  try {
+    if (!env || !env.FOTOS || !cobroLlaveOk(env) || !cobroParaNegocio(env, clave)) return "";
+    const r = await cobroLee(env, clave);
+    if (!r || r.estado === "se_desconecto") return "";
+    if (r.proveedor === "mp" && cobroMpListo(env)) return "mp";
+    if (r.proveedor === "stripe" && cobroStripeListo(env)) return "stripe";
+  } catch (e) {}
+  return "";
+}
+function cobroOfrece(env, clave) {
+  return !!(env && env.FOTOS) && cobroParaNegocio(env, clave) && (cobroMpListo(env) || cobroStripeListo(env));
+}
+async function cobroDueno(env, clave, d) {
+  const permiso = await revisarPin(env, clave, d && d.pin);
+  if (!permiso.ok) throw new Error("ese NIP no es");
+  if (permiso.rol !== "dueno") throw new Error("esto es del dueño: hace falta su NIP, no el del cajero");
+}
+async function cobroAvisaDueno(env, clave, texto) {
+  try { const cfg = await traerConfig(env, clave); await chatAvisar(env, cfg, texto); } catch (e) {}
+}
+/* --- Mercado Pago --- */
+async function mpToken(env, campos) {
+  const r = await fetch(MP_API + "/oauth/token", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(Object.assign({ client_id: String(env.MP_APP_ID).trim(), client_secret: String(env.MP_APP_SECRET).trim() }, campos))
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error("Mercado Pago no dio el permiso (" + r.status + ")");
+  return j;
+}
+/* El token del negocio, renovado si le faltan menos de 30 dias. */
+async function cobroTokenMp(env, cual, r) {
+  let t = await cobroDescifra(env, cual, r.sobre);
+  if (r.vence && r.vence - Date.now() > COBRO_RENUEVA_DIAS * 864e5) return t.access_token;
+  try {
+    const n = await mpToken(env, { grant_type: "refresh_token", refresh_token: t.refresh_token });
+    t = { access_token: n.access_token, refresh_token: n.refresh_token || t.refresh_token };
+    r.sobre = await cobroCifra(env, cual, t);
+    r.vence = Date.now() + (Number(n.expires_in) || 15552000) * 1e3;
+    r.renovado = isoMX(); r.estado = "conectado";
+    await cobroGuardaNegocio(env, cual, r);
+    return t.access_token;
+  } catch (e) {
+    /* Si otro aviso ya lo renovo al mismo tiempo, se usa el nuevo. */
+    const otro = await cobroLee(env, cual);
+    if (otro && otro.vence && otro.vence > (r.vence || 0)) return (await cobroDescifra(env, cual, otro.sobre)).access_token;
+    if (r.vence && r.vence > Date.now()) return t.access_token;
+    r.estado = "se_desconecto";
+    await cobroGuardaNegocio(env, cual, r);
+    await cobroAvisaDueno(env, cual, "⚠️ <b>Tu Mercado Pago se desconectó de tu menú.</b>\nTus clientes no pueden pagar con tarjeta hasta que lo conectes otra vez: Panel › Cobrar con tarjeta en tu menú.");
+    throw new Error("el cobro con tarjeta de este negocio se desconectó; pregunta cómo pagar en el mostrador");
+  }
+}
+async function mpFirmaValida(encabezado, reqId, dataId, secreto) {
+  let ts = "", v1 = "";
+  String(encabezado || "").split(",").forEach((p) => {
+    const i = p.indexOf("=");
+    if (i < 0) return;
+    const k = p.slice(0, i).trim(), v = p.slice(i + 1).trim();
+    if (k === "ts") ts = v;
+    if (k === "v1") v1 = v.toLowerCase();
+  });
+  if (!/^[0-9]{9,14}$/.test(ts) || !/^[a-f0-9]{64}$/.test(v1)) return false;
+  let manifiesto = "";
+  if (dataId) manifiesto += "id:" + String(dataId).toLowerCase() + ";";
+  if (reqId) manifiesto += "request-id:" + String(reqId) + ";";
+  manifiesto += "ts:" + ts + ";";
+  const enc = new TextEncoder();
+  const llave = await crypto.subtle.importKey("raw", enc.encode(secreto), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const firma = await crypto.subtle.sign("HMAC", llave, enc.encode(manifiesto));
+  const esperado = Array.from(new Uint8Array(firma), (b) => b.toString(16).padStart(2, "0")).join("");
+  let d = 0;
+  for (let i = 0; i < 64; i++) d |= v1.charCodeAt(i) ^ esperado.charCodeAt(i);
+  return d === 0;
+}
+/* --- Stripe Connect (con la llave de la PLATAFORMA, no la de la suscripcion) --- */
+async function stripeConnectPide(env, metodo, camino, pares, idem, cuenta) {
+  const h = { authorization: "Bearer " + String(env.STRIPE_CONNECT_KEY || "").trim() };
+  let body;
+  if (pares) {
+    h["content-type"] = "application/x-www-form-urlencoded";
+    body = pares.map((kv) => encodeURIComponent(kv[0]) + "=" + encodeURIComponent(kv[1])).join("&");
+  }
+  if (idem) h["idempotency-key"] = idem;
+  if (cuenta) h["stripe-account"] = cuenta;
+  const r = await fetch(STRIPE_API + camino, { method: metodo, headers: h, body });
+  const j = await r.json().catch(() => null);
+  if (!r.ok) throw new Error("Stripe no aceptó (" + r.status + (j && j.error && j.error.code ? " " + j.error.code : "") + ")");
+  return j || {};
+}
+async function stripeConnectWeb(env, camino, pares) {
+  const r = await fetch(STRIPE_CONNECT_WEB + camino, {
+    method: "POST",
+    headers: { authorization: "Basic " + btoa(String(env.STRIPE_CONNECT_KEY || "").trim() + ":"), "content-type": "application/x-www-form-urlencoded" },
+    body: pares.map((kv) => encodeURIComponent(kv[0]) + "=" + encodeURIComponent(kv[1])).join("&")
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error("Stripe no aceptó (" + r.status + (j && j.error ? " " + j.error : "") + ")");
+  return j;
+}
+/* --- Lo que hace el dueno, con su NIP --- */
+async function cobroEstado(env, clave, d) {
+  const cual = cobroClave(clave);
+  await cobroDueno(env, cual, d);
+  const r = await cobroLee(env, cual);
+  const ofrece = cobroParaNegocio(env, cual);
+  return {
+    ok: true, tipo: "cobro_estado",
+    mp: ofrece && cobroMpListo(env), stripe: ofrece && cobroStripeListo(env),
+    conectado: r ? {
+      proveedor: r.proveedor, nombre: cobroNombre(r.proveedor),
+      cuenta: String(r.cuenta || "").slice(-4), desde: String(r.desde || "").slice(0, 10),
+      estado: r.estado || "conectado", prueba: r.vivo === false
+    } : null
+  };
+}
+async function cobroConectar(env, clave, d) {
+  const cual = cobroClave(clave);
+  await cobroDueno(env, cual, d);
+  if (!cobroParaNegocio(env, cual)) throw new Error("esto todavía no está disponible para tu negocio");
+  const prov = String(d.proveedor || "");
+  if (prov !== "mp" && prov !== "stripe") throw new Error("escoge Mercado Pago o Stripe");
+  if (prov === "mp" && !cobroMpListo(env)) throw new Error("conectar Mercado Pago todavía no está disponible");
+  if (prov === "stripe" && !cobroStripeListo(env)) throw new Error("conectar Stripe todavía no está disponible");
+  const ya = await cobroLee(env, cual);
+  if (ya && ya.estado !== "se_desconecto") throw new Error("ya tienes conectado " + cobroNombre(ya.proveedor) + ". Desconéctalo primero si quieres cambiar");
+  const estado = cobroAzar(24);
+  const vuelta = cobroBase(env) + "/cobro/" + prov + "/vuelta";
+  const reg = { clave: cual, proveedor: prov, creado: Date.now() };
+  let liga;
+  if (prov === "mp") {
+    const p = new URLSearchParams({ client_id: String(env.MP_APP_ID).trim(), response_type: "code", platform_id: "mp", state: estado, redirect_uri: vuelta });
+    if (String(env.MP_PKCE || "").trim() === "si") {
+      reg.verificador = cobroAzar(32);
+      const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(reg.verificador));
+      p.set("code_challenge", cobroB64(h).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""));
+      p.set("code_challenge_method", "S256");
+    }
+    liga = MP_AUTH_WEB + "?" + p.toString();
+  } else {
+    const cfg = await traerConfig(env, cual);
+    const p = new URLSearchParams({ response_type: "code", client_id: String(env.STRIPE_CONNECT_ID).trim(), scope: "read_write", state: estado, redirect_uri: vuelta });
+    p.set("stripe_user[country]", "MX");
+    const nombre = String(nombreNegocio(cfg) || "").slice(0, 60);
+    if (nombre) p.set("stripe_user[business_name]", nombre);
+    liga = STRIPE_CONNECT_WEB + "/oauth/authorize?" + p.toString();
+  }
+  await stripeGuarda(env, "_cobro/estados/" + estado + ".json", reg);
+  return { ok: true, tipo: "cobro_conectar", proveedor: prov, liga };
+}
+/* El regreso del OAuth. El state se usa UNA vez y vale 15 minutos. */
+async function cobroVuelta(env, prov, q) {
+  const mal = (clave, motivo) => ({ ir: (clave && !env.COBRO_BASE ? origenPublico(clave, "") : "") + "/cobro?" + (clave ? "c=" + encodeURIComponent(clave) + "&" : "") + "d=panel&ver=tarjeta&tarjeta=error&motivo=" + encodeURIComponent(motivo) });
+  const estado = String(q.get("state") || "");
+  if (!/^[a-f0-9]{48}$/.test(estado)) return mal("", "la liga no trae su sello. Vuelve a intentarlo desde tu panel");
+  const llave = "_cobro/estados/" + estado + ".json";
+  const reg = await stripeLee(env, llave);
+  if (!reg || reg.proveedor !== prov) return mal("", "esa liga ya se usó o no es de aquí. Vuelve a intentarlo desde tu panel");
+  await env.FOTOS.delete(llave);
+  const cual = reg.clave;
+  if (Date.now() - Number(reg.creado || 0) > COBRO_ESTADO_MIN * 6e4) return mal(cual, "pasaron más de 15 minutos. Vuelve a intentarlo");
+  if (q.get("error")) return mal(cual, "no se autorizó la conexión; no se conectó nada");
+  const code = String(q.get("code") || "");
+  if (!code || code.length > 300) return mal(cual, "no llegó la autorización; no se conectó nada");
+  const vuelta = cobroBase(env) + "/cobro/" + prov + "/vuelta";
+  try {
+    if (prov === "mp") {
+      const campos = { grant_type: "authorization_code", code, redirect_uri: vuelta };
+      if (reg.verificador) campos.code_verifier = reg.verificador;
+      const t = await mpToken(env, campos);
+      if (!t.refresh_token) throw new Error("sin refresh_token");
+      await cobroGuardaNegocio(env, cual, {
+        proveedor: "mp", cuenta: String(t.user_id || ""), vivo: t.live_mode !== false, desde: isoMX(), estado: "conectado",
+        vence: Date.now() + (Number(t.expires_in) || 15552000) * 1e3,
+        sobre: await cobroCifra(env, cual, { access_token: t.access_token, refresh_token: t.refresh_token })
+      });
+    } else {
+      const j = await stripeConnectWeb(env, "/oauth/token", [["grant_type", "authorization_code"], ["code", code], ["client_secret", String(env.STRIPE_CONNECT_KEY).trim()]]);
+      const acct = String(j.stripe_user_id || "");
+      if (!/^acct_[A-Za-z0-9]+$/.test(acct)) throw new Error("sin cuenta");
+      if ((j.livemode === true) !== cobroStripeEnVivo(env)) throw new Error("modo distinto");
+      await cobroGuardaNegocio(env, cual, {
+        proveedor: "stripe", cuenta: acct, vivo: j.livemode === true, desde: isoMX(), estado: "conectado",
+        sobre: await cobroCifra(env, cual, { cuenta: acct })
+      });
+      await stripeGuarda(env, "_cobro/cuentas/stripe-" + acct + ".json", { clave: cual });
+    }
+  } catch (e) {
+    return mal(cual, "no se pudo terminar la conexión con " + cobroNombre(prov) + ". Vuelve a intentarlo");
+  }
+  try { await avisaEdsiRed(env, "\u{1F50C} <b>" + cual + "</b> conectó su " + cobroNombre(prov) + " para cobrar con tarjeta en su menú."); } catch (e) {}
+  return { ir: (env.COBRO_BASE ? "" : origenPublico(cual, "")) + "/cobro?c=" + encodeURIComponent(cual) + "&d=panel&ver=tarjeta&tarjeta=ok" };
+}
+async function cobroDesconectar(env, clave, d) {
+  const cual = cobroClave(clave);
+  await cobroDueno(env, cual, d);
+  const r = await cobroLee(env, cual);
+  if (!r) return { ok: true, tipo: "cobro_desconectar", ya: true };
+  let aviso = "";
+  if (r.proveedor === "stripe") {
+    try {
+      if (!cobroStripeListo(env)) throw new Error("sin llave");
+      await stripeConnectWeb(env, "/oauth/deauthorize", [["client_id", String(env.STRIPE_CONNECT_ID).trim()], ["stripe_user_id", String(r.cuenta)]]);
+    } catch (e) {
+      aviso = "Por si acaso, quítale el permiso a La Carta también desde tu Stripe.";
+    }
+    try { await env.FOTOS.delete("_cobro/cuentas/stripe-" + String(r.cuenta) + ".json"); } catch (e) {}
+  } else {
+    aviso = "Si quieres, quítale el permiso a La Carta también desde tu Mercado Pago, en la parte de seguridad donde salen las aplicaciones conectadas.";
+  }
+  await env.FOTOS.delete("_cobro/negocios/" + cual + ".json");
+  return { ok: true, tipo: "cobro_desconectar", ya: false, aviso };
+}
+/* --- Lo que hace el comensal: abrir el cobro de SU pedido o de SU mesa --- */
+function cobroVueltaLimpia(v) {
+  const t = String(v || "");
+  return t.length < 200 && /^\/(?!\/)[A-Za-z0-9\/_.-]*(\?[A-Za-z0-9=&_.%-]*)?$/.test(t) ? t : "";
+}
+async function cobroTarjeta(env, clave, d) {
+  const cual = cobroClave(clave);
+  const prov = await cobroPublico(env, cual);
+  if (!prov) throw new Error("aquí todavía no se puede pagar con tarjeta; pregunta cómo pagar en el mostrador");
+  const r = await cobroLee(env, cual);
+  const cfg = await traerConfig(env, cual);
+  if (!cfg || !cfg.clave) throw new Error("no encontré ese negocio");
+  const negocio = String(nombreNegocio(cfg) || cual);
+  let tipo, ids, monto = 0, mesa = "", titulo;
+  if (d.id != null && String(d.id) !== "") {
+    const id = pideId(d);
+    const f = (await traerCon(env, TABLAS.pedidos, [
+      { columnName: "id", condition: "eq", value: id },
+      { columnName: "clave", condition: "eq", value: cual }
+    ]))[0];
+    if (!f) throw new Error("no encontré ese pedido");
+    if (String(f.pago || "") === "pagado") return { ok: true, tipo: "cobro_tarjeta", ya_pagado: true };
+    if (String(f.estado || "") !== "por_pagar") throw new Error("ese pedido se paga en el mostrador");
+    tipo = "pedido"; ids = [id]; monto = Math.round(Number(f.total || 0) * 100) / 100; titulo = "Pedido " + id;
+  } else {
+    mesa = limpiaMesa(d.mesa);
+    if (!mesa) throw new Error("falta decir qué mesa");
+    const hoy = diaEnMX();
+    const abiertos = (await traerFilas(env, TABLAS.pedidos, cual)).filter((p) => abiertoHoy(p, hoy) && String(p.mesa || "").trim() === mesa);
+    if (!abiertos.length) throw new Error("esta mesa no tiene nada por pagar");
+    abiertos.forEach((p) => { monto += Number(p.total || 0); });
+    monto = Math.round(monto * 100) / 100;
+    if (d.total != null && Math.abs(Number(d.total) - monto) > 0.5) throw new Error("su cuenta cambió: ahora son " + pesos(monto) + ". Ábrala otra vez para revisarla");
+    tipo = "mesa"; ids = abiertos.map((p) => Number(p.id)); titulo = "Cuenta de la mesa " + mesa;
+  }
+  if (!(monto >= COBRO_MINIMO)) throw new Error("con tarjeta se pagan cuentas desde $" + COBRO_MINIMO + "; esta págala en el mostrador");
+  const ref = cobroAzar(10);
+  const reg = { ref, clave: cual, proveedor: prov, cuenta: String(r.cuenta || ""), tipo, ids, mesa, monto, creado: isoMX(), estado: "abierto", vuelta: cobroVueltaLimpia(d.vuelta) };
+  await stripeGuarda(env, "_cobro/cobros/" + ref + ".json", reg);
+  const regreso = origenPublico(cual, String(d.__origen || "")) + "/pagado?c=" + encodeURIComponent(cual) + "&r=" + ref;
+  const nombreCobro = (titulo + " · " + negocio).slice(0, 120);
+  let liga = "";
+  if (prov === "mp") {
+    const token = await cobroTokenMp(env, cual, r);
+    const resp = await fetch(MP_API + "/checkout/preferences", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + token, "x-idempotency-key": "lc-" + ref },
+      body: JSON.stringify({
+        items: [{ id: "lc-" + tipo, title: nombreCobro, quantity: 1, unit_price: monto, currency_id: "MXN" }],
+        external_reference: "lc|" + cual + "|" + ref,
+        notification_url: cobroBase(env) + "/cobro/mp-aviso?c=" + encodeURIComponent(cual) + "&r=" + ref,
+        back_urls: { success: regreso, pending: regreso, failure: regreso + "&no=1" },
+        auto_return: "approved",
+        /* Sin OXXO ni efectivo: la comida no espera tres dias. Aprobado o rechazado, al momento. */
+        binary_mode: true,
+        payment_methods: { excluded_payment_types: [{ id: "ticket" }, { id: "atm" }] }
+      })
+    });
+    const j = await resp.json().catch(() => ({}));
+    if (resp.status === 401 || resp.status === 403) {
+      r.estado = "se_desconecto";
+      await cobroGuardaNegocio(env, cual, r);
+      await cobroAvisaDueno(env, cual, "⚠️ <b>Tu Mercado Pago ya no deja cobrar desde tu menú.</b>\nConéctalo otra vez: Panel › Cobrar con tarjeta en tu menú.");
+      throw new Error("aquí todavía no se puede pagar con tarjeta; pregunta cómo pagar en el mostrador");
+    }
+    if (!resp.ok || !j.init_point) throw new Error("Mercado Pago no abrió el cobro (" + resp.status + "); no se cobró nada");
+    liga = String(j.init_point);
+  } else {
+    const ses = await stripeConnectPide(env, "POST", "/v1/checkout/sessions", [
+      ["mode", "payment"], ["client_reference_id", ref], ["locale", "es-419"],
+      ["line_items[0][quantity]", "1"],
+      ["line_items[0][price_data][currency]", "mxn"],
+      ["line_items[0][price_data][unit_amount]", String(Math.round(monto * 100))],
+      ["line_items[0][price_data][product_data][name]", nombreCobro],
+      ["metadata[que]", "cobro"], ["metadata[clave]", cual], ["metadata[ref]", ref],
+      ["payment_intent_data[metadata][que]", "cobro"], ["payment_intent_data[metadata][clave]", cual], ["payment_intent_data[metadata][ref]", ref],
+      ["payment_method_types[0]", "card"],
+      ["success_url", regreso + "&sid={CHECKOUT_SESSION_ID}"], ["cancel_url", regreso + "&no=1"]
+    ], "lc-" + ref, String(r.cuenta));
+    liga = String(ses.url || "");
+    if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
+    reg.sesion = String(ses.id || "");
+    await stripeGuarda(env, "_cobro/cobros/" + ref + ".json", reg);
+  }
+  return { ok: true, tipo: "cobro_tarjeta", liga, monto, proveedor: prov };
+}
+/* --- Cuando el dinero si llego: se marca pagado UNA vez --- */
+async function cobroCierraMesa(env, reg, metodo, pagoId) {
+  const filas = await traerFilas(env, TABLAS.pedidos, reg.clave);
+  const quedan = filas.filter((p) => reg.ids.indexOf(Number(p.id)) > -1 && String(p.pago || "") !== "pagado" && String(p.estado || "") !== "cancelado");
+  const items = [];
+  let consumo = 0;
+  quedan.forEach((p) => {
+    consumo += Number(p.total || 0);
+    const its = comoLista(p.items);
+    if (its.length) {
+      its.forEach((i) => {
+        const n = Number(i.cantidad || 1);
+        items.push({ cantidad: n, producto: String(i.producto || i.nombre || ""), importe: i.importe != null ? Number(i.importe) : Number(i.precio || 0) * n, nota: String(i.nota || i.notas || "") });
+      });
+    } else if (String(p.pedido || "").trim()) {
+      items.push({ cantidad: 1, producto: String(p.pedido).trim(), importe: Number(p.total || 0) });
+    }
+  });
+  consumo = Math.round(consumo * 100) / 100;
+  const cuando = isoMX();
+  const cobrados = [];
+  for (const p of quedan) {
+    const t = await actualizarFilas(env, TABLAS.pedidos,
+      [{ columnName: "id", condition: "eq", value: Number(p.id) }, { columnName: "clave", condition: "eq", value: String(reg.clave) }],
+      { pago: "pagado", pago_en: cuando, pago_metodo: metodo, pago_ref: String(pagoId) });
+    if (t.length) cobrados.push(Number(p.id));
+  }
+  if (reg.mesa) { try { await olvidarLlamada(env, reg.clave, reg.mesa); } catch (e) {} }
+  let venta = null;
+  if (cobrados.length) {
+    venta = await guardarVenta(env, reg.clave, {
+      mesa: reg.mesa, tipo: "mesa", items, subtotal: consumo, propina: 0, total: consumo,
+      forma_pago: metodo, referencia: String(pagoId), cajero: "en línea"
+    });
+  }
+  return { cobro: "pagado", tipo: "mesa", mesa: reg.mesa, cobrados: cobrados.length, folio: venta ? venta.folio : null, consumo };
+}
+async function cobroAplica(env, reg, pagoId, origen) {
+  const marca = "_cobro/pagados/" + reg.proveedor + "-" + String(pagoId).replace(/[^A-Za-z0-9_]/g, "").slice(0, 80) + ".json";
+  if (await env.FOTOS.head(marca)) return { cobro: "ya_aplicado" };
+  const fresco = (await stripeLee(env, "_cobro/cobros/" + reg.ref + ".json")) || reg;
+  const lugar = reg.tipo === "mesa" ? "Mesa " + reg.mesa : "Pedido #" + reg.ids[0];
+  if (fresco.estado === "pagado") {
+    if (String(fresco.pago) !== String(pagoId)) {
+      await stripeGuarda(env, marca, { ref: reg.ref, fecha: isoMX(), doble: true });
+      await cobroAvisaDueno(env, reg.clave, "⚠️ <b>Te pagaron DOS veces</b> la misma cuenta con tarjeta: " + lugar + " · " + pesos(reg.monto) + ".\nDevuelve uno desde tu " + cobroNombre(reg.proveedor) + ".");
+      return { cobro: "doble" };
+    }
+    return { cobro: "ya_pagado" };
+  }
+  const metodo = "Tarjeta en línea · " + cobroNombre(reg.proveedor);
+  let salida;
+  if (reg.tipo === "pedido") {
+    const r = await marcarPagado(env, reg.clave, { id: reg.ids[0], pago_metodo: metodo, pago_ref: String(pagoId), __origen: origen });
+    salida = { cobro: "pagado", tipo: "pedido", id: reg.ids[0] };
+    if (r && r.ya_estaba) {
+      salida.ya_estaba = true;
+      await cobroAvisaDueno(env, reg.clave, "⚠️ <b>Ojo:</b> el " + lugar + " ya estaba marcado como pagado y además lo pagaron con tarjeta (" + pesos(reg.monto) + "). Revisa si cobraste dos veces.");
+    }
+  } else {
+    salida = await cobroCierraMesa(env, reg, metodo, pagoId);
+    if (Math.abs(Number(salida.consumo || 0) - Number(reg.monto)) > 0.5) {
+      await cobroAvisaDueno(env, reg.clave, "⚠️ <b>Ojo con la " + lugar + "</b>: pagó " + pesos(reg.monto) + " con tarjeta, pero en la caja ya se había cobrado una parte. Revisa si cobraste dos veces.");
+    }
+  }
+  fresco.estado = "pagado"; fresco.pago = String(pagoId); fresco.pagado_en = isoMX();
+  await stripeGuarda(env, "_cobro/cobros/" + reg.ref + ".json", fresco);
+  await stripeGuarda(env, marca, { ref: reg.ref, fecha: isoMX() });
+  await cobroAvisaDueno(env, reg.clave, "\u{1F4B3} <b>Pagaron con tarjeta</b>: " + pesos(reg.monto) + " · " + lugar + ".\nEl dinero ya está en tu " + cobroNombre(reg.proveedor) + ".");
+  return salida;
+}
+async function cobroLeeRegistro(env, ref, clave, prov) {
+  const r = String(ref || "");
+  if (!/^[a-f0-9]{20}$/.test(r)) return null;
+  const reg = await stripeLee(env, "_cobro/cobros/" + r + ".json");
+  if (!reg || String(reg.clave) !== String(clave || "").toLowerCase() || (prov && reg.proveedor !== prov)) return null;
+  return reg;
+}
+/* MP: no se le cree al aviso. Se pregunta el pago con el token DEL NEGOCIO. */
+async function cobroMpRevisa(env, reg, pagoId, origen) {
+  const r = await cobroLee(env, reg.clave);
+  if (!r || r.proveedor !== "mp" || String(r.cuenta) !== String(reg.cuenta)) return { cobro: "sin_conexion" };
+  const token = await cobroTokenMp(env, reg.clave, r);
+  const resp = await fetch(MP_API + "/v1/payments/" + encodeURIComponent(pagoId), { headers: { authorization: "Bearer " + token } });
+  if (!resp.ok) return { cobro: "mp_" + resp.status };
+  const p = await resp.json().catch(() => ({}));
+  if (String(p.status || "") !== "approved") return { cobro: "no_aprobado", estado: String(p.status || "") };
+  if (String(p.external_reference || "") !== "lc|" + reg.clave + "|" + reg.ref) return { cobro: "otra_referencia" };
+  if (String(p.currency_id || "").toUpperCase() !== "MXN" || Number(p.transaction_amount || 0) + 0.01 < Number(reg.monto)) {
+    try { await avisaEdsiRed(env, "⚠️ <b>Cobro con tarjeta con monto raro</b> en " + reg.clave + ": $" + Number(p.transaction_amount || 0) + " de " + pesos(reg.monto) + ". No lo marqué pagado."); } catch (e) {}
+    return { cobro: "monto_raro" };
+  }
+  return await cobroAplica(env, reg, String(p.id || pagoId), origen);
+}
+async function cobroMpAviso(env, request, q, origen) {
+  if (!cobroMpListo(env)) return { status: 200, cuerpo: { ok: false, motivo: "sin_configurar" } };
+  let b = {};
+  try { b = await leerCuerpo(request); } catch (e) { b = {}; }
+  const tipo = String((b && b.type) || q.get("type") || q.get("topic") || "");
+  const crudoId = String(q.get("data.id") || (b && b.data && b.data.id) || q.get("id") || "");
+  const secreto = String(env.MP_COBRO_FIRMA || "").trim();
+  if (secreto && !(await mpFirmaValida(request.headers.get("x-signature"), request.headers.get("x-request-id"), crudoId, secreto))) {
+    return { status: 401, cuerpo: { ok: false, motivo: "firma no valida" } };
+  }
+  const id = crudoId.replace(/[^0-9]/g, "");
+  if (tipo !== "payment" || !id) return { status: 200, cuerpo: { ok: true, motivo: "no_es_pago" } };
+  const reg = await cobroLeeRegistro(env, q.get("r"), q.get("c"), "mp");
+  if (!reg) return { status: 200, cuerpo: { ok: true, motivo: "sin_registro" } };
+  try {
+    return { status: 200, cuerpo: Object.assign({ ok: true }, await cobroMpRevisa(env, reg, id, origen)) };
+  } catch (e) {
+    return { status: 500, cuerpo: { ok: false, motivo: String(e && e.message || e).slice(0, 120) } };
+  }
+}
+/* Stripe: la sesion tiene que ser de la cuenta conectada de ESE negocio. */
+async function cobroStripeSesion(env, reg, o, acct, origen) {
+  const md = o.metadata || {};
+  if (md.que !== "cobro" || String(md.ref || "") !== reg.ref || String(md.clave || "") !== reg.clave) return { cobro: "otra_referencia" };
+  if (!acct || acct !== String(reg.cuenta)) {
+    try { await avisaEdsiRed(env, "⚠️ <b>Aviso de Stripe de otra cuenta</b> para " + reg.clave + ". No lo marqué pagado."); } catch (e) {}
+    return { cobro: "otra_cuenta" };
+  }
+  if (o.payment_status !== "paid") return { cobro: "sin_pagar_aun" };
+  if (!(Number(o.amount_total) === Math.round(Number(reg.monto) * 100) && String(o.currency || "").toLowerCase() === "mxn")) {
+    try { await avisaEdsiRed(env, "⚠️ <b>Cobro con tarjeta con monto raro</b> en " + reg.clave + ": $" + (Number(o.amount_total) / 100) + " de " + pesos(reg.monto) + ". No lo marqué pagado."); } catch (e) {}
+    return { cobro: "monto_raro" };
+  }
+  return await cobroAplica(env, reg, String(typeof o.payment_intent === "string" ? o.payment_intent : o.id), origen);
+}
+async function cobroStripeAviso(env, request, origen) {
+  if (!cobroStripeListo(env)) return { status: 503, cuerpo: { ok: false, motivo: "no configurado" } };
+  const crudo = await request.text();
+  if (crudo.length > 262144) return { status: 413, cuerpo: { ok: false } };
+  const bien = await stripeFirmaValida(crudo, request.headers.get("stripe-signature") || "", String(env.STRIPE_CONNECT_FIRMA).trim(), Math.floor(Date.now() / 1e3));
+  if (!bien) return { status: 400, cuerpo: { ok: false, motivo: "firma no valida" } };
+  let ev;
+  try { ev = JSON.parse(crudo); } catch (e) { return { status: 400, cuerpo: { ok: false } }; }
+  const evId = String(ev && ev.id || "");
+  if (!/^evt_[A-Za-z0-9]+$/.test(evId)) return { status: 400, cuerpo: { ok: false } };
+  if ((ev.livemode === true) !== cobroStripeEnVivo(env)) return { status: 200, cuerpo: { ok: true, ignorado: "otro modo" } };
+  if (await env.FOTOS.head("_cobro/eventos/" + evId + ".json")) return { status: 200, cuerpo: { ok: true, repetido: true } };
+  const tipo = String(ev.type || "");
+  const o = (ev.data && ev.data.object) || {};
+  const acct = String(ev.account || "");
+  let salida;
+  try {
+    if (tipo === "account.application.deauthorized") {
+      const idx = /^acct_[A-Za-z0-9]+$/.test(acct) ? await stripeLee(env, "_cobro/cuentas/stripe-" + acct + ".json") : null;
+      const r = idx ? await cobroLee(env, idx.clave) : null;
+      if (r && r.proveedor === "stripe" && r.cuenta === acct) {
+        await env.FOTOS.delete("_cobro/negocios/" + idx.clave + ".json");
+        await cobroAvisaDueno(env, idx.clave, "⚠️ <b>Tu Stripe se desconectó de tu menú.</b>\nTus clientes ya no pueden pagar con tarjeta hasta que lo conectes otra vez.");
+      }
+      if (idx) await env.FOTOS.delete("_cobro/cuentas/stripe-" + acct + ".json");
+      salida = { cobro: idx ? "desconectado" : "sin_negocio" };
+    } else if ((tipo === "checkout.session.completed" || tipo === "checkout.session.async_payment_succeeded") && (o.metadata || {}).que === "cobro") {
+      const md = o.metadata || {};
+      const reg = await cobroLeeRegistro(env, md.ref, md.clave, "stripe");
+      salida = reg ? await cobroStripeSesion(env, reg, o, acct, origen) : { cobro: "sin_registro" };
+    } else {
+      salida = { nada: tipo };
+    }
+  } catch (e) {
+    return { status: 500, cuerpo: { ok: false, motivo: String(e && e.message || e).slice(0, 120) } };
+  }
+  await stripeGuarda(env, "_cobro/eventos/" + evId + ".json", { tipo, fecha: isoMX(), salida });
+  return { status: 200, cuerpo: Object.assign({ ok: true }, salida) };
+}
+/* La pagina /pagado pregunta aqui. Si trae el pago del regreso, se revisa
+   en ese momento (con la llave del negocio): no hay que esperar el aviso. */
+async function cobroPagoVer(env, q, origen) {
+  const reg = await cobroLeeRegistro(env, q.get("r"), q.get("c"), "");
+  if (!reg) return { ok: false, error: "no encontré ese cobro" };
+  let revisado = null;
+  if (reg.estado !== "pagado") {
+    try {
+      const pid = String(q.get("pid") || "").replace(/[^0-9]/g, "");
+      const sid = String(q.get("sid") || "");
+      if (reg.proveedor === "mp" && pid) revisado = await cobroMpRevisa(env, reg, pid, origen);
+      if (reg.proveedor === "stripe" && /^cs_[A-Za-z0-9_]+$/.test(sid) && cobroStripeListo(env)) {
+        const o = await stripeConnectPide(env, "GET", "/v1/checkout/sessions/" + sid, null, null, String(reg.cuenta));
+        revisado = await cobroStripeSesion(env, reg, o, String(reg.cuenta), origen);
+      }
+    } catch (e) { revisado = { cobro: "no_se_pudo_revisar" }; }
+  }
+  const fresco = (await cobroLeeRegistro(env, reg.ref, reg.clave, "")) || reg;
+  return {
+    ok: true, pagado: fresco.estado === "pagado", monto: fresco.monto, tipo: fresco.tipo, mesa: fresco.mesa || "",
+    pedido: fresco.tipo === "pedido" ? fresco.ids[0] : null, proveedor: cobroNombre(fresco.proveedor), vuelta: fresco.vuelta || "",
+    revisado: revisado ? revisado.cobro : ""
+  };
+}
+async function cobroRenuevaTodos(env) {
+  const informe = [];
+  if (!cobroMpListo(env) || !env.FOTOS) return { ok: false, motivo: "sin configurar", informe };
+  let cursor;
+  for (let v = 0; v < 10; v++) {
+    const l = await env.FOTOS.list({ prefix: "_cobro/negocios/", limit: 500, cursor });
+    for (const o of (l.objects || [])) {
+      const cual = o.key.slice(16).replace(/\.json$/, "");
+      const r = await cobroLee(env, cual);
+      if (!r || r.proveedor !== "mp" || r.estado === "se_desconecto") continue;
+      if (r.vence && r.vence - Date.now() > COBRO_RENUEVA_DIAS * 864e5) { informe.push({ clave: cual, que: "al corriente" }); continue; }
+      try { await cobroTokenMp(env, cual, r); informe.push({ clave: cual, que: "renovado" }); }
+      catch (e) { informe.push({ clave: cual, que: "se desconectó" }); }
+    }
+    if (!l.truncated) break;
+    cursor = l.cursor;
+  }
+  return { ok: true, informe };
+}
+async function cobroRenovar(env, clave, d) {
+  pideAdmin(env, d);
+  return Object.assign({ tipo: "cobro_renovar" }, await cobroRenuevaTodos(env));
+}
 var ATRASO_MAX_DIAS = 35;
 async function revisarSuscripciones(env, soloVer) {
   const informe = [];
@@ -36730,6 +37583,11 @@ var ESCRITURAS = {
   recarga: recargarTanque,
   tanque_comprar: tanqueComprar,
   tanque_stripe: tanqueStripe,
+  cobro_estado: cobroEstado,
+  cobro_conectar: cobroConectar,
+  cobro_desconectar: cobroDesconectar,
+  cobro_tarjeta: cobroTarjeta,
+  cobro_renovar: cobroRenovar,
   kit_comprar: kitComprar,
   kit_contado: kitContado,
   prospecto_charla: prospectoCharla,
@@ -37095,7 +37953,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.42";  // version: "2.9.42"
+var VERSION_BETO = "2.9.43";  // version: "2.9.43"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -40355,6 +41213,7 @@ __name(ligaNegocio, "ligaNegocio");
 var worker_beto_todo_default = {
   async scheduled(evento, env, ctx) {
     ctx.waitUntil(revisarSuscripciones(env, false).catch(() => {}));
+    ctx.waitUntil(cobroRenuevaTodos(env).catch(() => {}));
   },
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -40552,6 +41411,12 @@ await chatAvisar(env, cfg,
     }
     if (ruta === "/caja") {
       return new Response(HTML_CAJA, {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+      });
+    }
+    if (ruta === "/pagado") {
+      return new Response(HTML_PAGADO, {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
@@ -41954,6 +42819,9 @@ await chatAvisar(env, cfg,
           // publica. Los datos para pagar viajan pegados al pedido, y nada mas
           // cuando de veras quedo algo por pagar.
           cobro: String(cfg.cobro_domicilio || ""),
+          // Si se puede pagar con tarjeta aqui y con quien. Nunca la cuenta ni el token.
+          tarjeta: await cobroPublico(env, String(clave)),
+          tarjeta_ofrece: cobroOfrece(env, String(clave)),
           // Lo que cobra de envio. Es publico a proposito: el cliente tiene
           // que saber cuanto va a pagar ANTES de transferir. Hasta hoy no lo
           // sabia en ningun lado.
@@ -42212,6 +43080,26 @@ await chatAvisar(env, cfg,
       });
     }
     /* Stripe avisa aqui: kit de contado (y luego recargas y suscripcion). */
+    /* COBRO CONECTADO: el regreso de la autorizacion y los avisos de pago. */
+    if (ruta === "/cobro/mp/vuelta" || ruta === "/cobro/stripe/vuelta") {
+      let ir = "/cobro?tarjeta=error";
+      try { ir = (await cobroVuelta(env, ruta === "/cobro/mp/vuelta" ? "mp" : "stripe", q)).ir; } catch (e) {}
+      return new Response(null, { status: 302, headers: { location: ir, "cache-control": "no-store" } });
+    }
+    if (ruta === "/cobro/mp-aviso") {
+      let r;
+      try { r = await cobroMpAviso(env, request, q, url.origin); }
+      catch (e) { r = { status: 500, cuerpo: { ok: false, motivo: String(e && e.message || e).slice(0, 120) } }; }
+      return json(r.cuerpo, r.status);
+    }
+    if (ruta === "/cobro/stripe-aviso" && request.method === "POST") {
+      const r = await cobroStripeAviso(env, request, url.origin);
+      return json(r.cuerpo, r.status);
+    }
+    if (ruta === "/cobro/pago") {
+      try { return json(await cobroPagoVer(env, q, url.origin)); }
+      catch (e) { return json({ ok: false, error: "no se pudo revisar" }, 502); }
+    }
     if (ruta === "/stripe-aviso" && request.method === "POST") {
       const r = await stripeAviso(env, request);
       return json(r.cuerpo, r.status);
