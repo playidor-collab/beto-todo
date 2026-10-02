@@ -37861,8 +37861,9 @@ var ORDEN_PROSPECTO = "Eres el asistente de La Carta (Comandero C1) en lacartame
   "Háblale de usted, en español sencillo de México, corto (máximo 3 renglones), amable y sin presionar, en texto plano (sin asteriscos ni #). " +
   "Contesta SOLO con los HECHOS de abajo. Los hechos están escritos para un vendedor: tradúcelos para el dueño y NUNCA repitas instrucciones internas (como 'no des descuentos', 'no lo prometas', 'ofrécele'). " +
   "Si lo que pregunta no está en los hechos, no lo inventes: dile que eso se lo confirma Edsi, el dueño de La Carta, y pon no_se en true. " +
-  "Tu objetivo: resolver sus dudas y, sin prisa, averiguar qué tipo de negocio tiene y en qué colonia y ciudad está. Una pregunta a la vez, y solo cuando venga al caso. " +
-  "Cuando dé su colonia, dile que alguien de La Carta puede pasar a enseñárselo funcionando, sin compromiso. " +
+  "Tu objetivo: resolver sus dudas y, sin prisa, averiguar qué tipo de negocio tiene y en qué ciudad y colonia está. Una pregunta a la vez, y solo cuando venga al caso. " +
+  "Vendemos a todo México por paquetería. Solo si está en Manzanillo, Colima, Tecomán o Ciudad Guzmán, dile que alguien de La Carta puede pasar a enseñárselo funcionando, sin compromiso. " +
+  "Si está en cualquier otra ciudad, o no sabes dónde está, NUNCA prometas visitas, demostraciones ni instalación en persona: dile que la caja se le manda a su ciudad (gratis a una sucursal PuntoPost o $170 a su puerta), que la deja lista él mismo en unos diez minutos con el instructivo, y que puede comprarla en lacartamenu.com/comprar. " +
   "Responde SOLO un objeto JSON con esta forma: {\"respuesta\":\"...\",\"no_se\":false,\"negocio\":\"\",\"colonia\":\"\",\"nombre\":\"\",\"telefono\":\"\"}. " +
   "En negocio, colonia, nombre y telefono pon lo que el cliente haya dicho en TODA la plática, o vacío si no lo dijo.";
 async function prospectoCharla(env, clave, d) {
@@ -37876,12 +37877,12 @@ async function prospectoCharla(env, clave, d) {
   const llave = "prospectos/" + ses + ".json";
   const reg = (await stripeLee(env, llave)) || { sesion: ses, fecha: isoMX(), tipo: L(d.tipo, 20), mensajes: 0, preguntas: [] };
   if (reg.mensajes >= PROSPECTO_TOPE_PLATICA) {
-    return { ok: true, tipo: "prospecto_charla", respuesta: "Ya platicamos bastante por aquí. Para seguir, escríbame por WhatsApp con el botón de abajo y le contesta Edsi.", whatsapp: true };
+    return { ok: true, tipo: "prospecto_charla", respuesta: whatsCasa(env) ? "Ya platicamos bastante por aquí. Para seguir, escríbame por WhatsApp con el botón de abajo y le contesta Edsi." : "Ya platicamos bastante por aquí. Si le queda una duda, escríbanos a privacidad@lacartamenu.com y le contesta Edsi. Para comprar: lacartamenu.com/comprar.", whatsapp: !!whatsCasa(env) };
   }
   const dia = isoMX().slice(0, 10);
   const cuenta = (await stripeLee(env, "prospectos/cuenta/" + dia + ".json")) || { n: 0 };
   if (cuenta.n >= PROSPECTO_TOPE_DIA || !env.OPENAI_KEY) {
-    return { ok: true, tipo: "prospecto_charla", respuesta: "Ahorita no puedo contestarle por aquí. Escríbame por WhatsApp con el botón de abajo, por favor.", whatsapp: true };
+    return { ok: true, tipo: "prospecto_charla", respuesta: whatsCasa(env) ? "Ahorita no puedo contestarle por aquí. Escríbame por WhatsApp con el botón de abajo, por favor." : "Ahorita no puedo contestarle por aquí. Intente otra vez en un rato, o escríbanos a privacidad@lacartamenu.com.", whatsapp: !!whatsCasa(env) };
   }
   cuenta.n++;
   await stripeGuarda(env, "prospectos/cuenta/" + dia + ".json", cuenta);
@@ -37902,7 +37903,7 @@ async function prospectoCharla(env, clave, d) {
     } catch (e) { dicho = null; }
   }
   if (!dicho || !String(dicho.respuesta || "").trim()) {
-    return { ok: true, tipo: "prospecto_charla", respuesta: "Perdón, se me trabó. ¿Me repite su pregunta? O escríbame por WhatsApp con el botón de abajo.", whatsapp: true };
+    return { ok: true, tipo: "prospecto_charla", respuesta: whatsCasa(env) ? "Perdón, se me trabó. ¿Me repite su pregunta? O escríbame por WhatsApp con el botón de abajo." : "Perdón, se me trabó. ¿Me repite su pregunta?", whatsapp: !!whatsCasa(env) };
   }
   const respuesta = String(dicho.respuesta).replace(/\*\*/g, "").replace(/^#+\s*/gm, "").trim().slice(0, 900);
   reg.mensajes++;
@@ -38453,7 +38454,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.54";  // version: "2.9.54"
+var VERSION_BETO = "2.9.55";  // version: "2.9.55"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -38538,7 +38539,8 @@ async function paginaVideo(env) {
     ? '<a class="wa" href="https://wa.me/' + tel +
       '?text=' + encodeURIComponent("Hola, vi el video del Comandero y quiero uno para mi negocio.") +
       '">Quiero uno para mi negocio</a>'
-    : '<div class="sinwa">Pide informes con quien te dio esta caja.</div>';
+    : '<a class="wa" href="/pregunta">Quiero uno para mi negocio</a>' +
+      '<div class="sinwa">Pregúntanos lo que quieras. Te mandamos tu caja a cualquier parte de México.</div>';
 
   return VIDEO_CABEZA + marco + VIDEO_PIE.split("{{BOTON}}").join(boton);
 }
@@ -39196,7 +39198,7 @@ var STRIPE_CONTADO_HTML = '<div style="margin-top:24px"><label>O de contado, des
 var HTML_PORTADA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>La Carta &middot; El mesero digital para taquer&iacute;as, fondas y puestos</title>
-<meta name="description" content="Sus clientes escanean el c&oacute;digo de su mesa, piden desde su celular y la comanda sale impresa sola en su cocina. Sin computadora. Manzanillo y Colima.">
+<meta name="description" content="Sus clientes escanean el c&oacute;digo de su mesa, piden desde su celular y la comanda sale impresa sola en su cocina. Sin computadora. Se lo mandamos a todo M&eacute;xico.">
 <meta property="og:title" content="La Carta &middot; Que nadie se le vaya por esperar">
 <meta property="og:description" content="Sus clientes piden desde su celular y la comanda sale impresa sola en su cocina. Sin computadora.">
 <meta property="og:url" content="https://lacartamenu.com/">
@@ -39280,7 +39282,7 @@ footer .ancho{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px
 }
 </style></head><body>
 <header><div class="ancho">
-<a class="marca" href="/">LA CARTA<small>COMANDERO C1 &middot; MANZANILLO, COLIMA</small></a>
+<a class="marca" href="/">LA CARTA<small>COMANDERO C1 &middot; ENV&Iacute;O A TODO M&Eacute;XICO</small></a>
 <div class="nav"><a class="btn borde chico" href="/pregunta">Preg&uacute;ntenos</a><a class="btn naranja chico" href="/comprar">Comprar</a></div>
 </div></header>
 
@@ -39336,7 +39338,7 @@ footer .ancho{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px
 
 <section id="caja"><div class="ancho">
 <h2>Qu&eacute; trae la caja</h2>
-<p class="sub">No es una aplicaci&oacute;n que baja y ah&iacute; le ve. Es una caja que alguien le lleva y le instala en unos diez minutos.</p>
+<p class="sub">No es una aplicaci&oacute;n que baja y ah&iacute; le ve. Es una caja que le llega a su negocio, a cualquier parte de M&eacute;xico, y usted la deja lista en unos diez minutos con su instructivo.</p>
 <div class="caja">
 <div class="cosa"><b>La impresora</b>T&eacute;rmica, Bluetooth, con su funda, cable y rollos de papel.</div>
 <div class="cosa"><b>Sus c&oacute;digos QR</b>Los de cada mesa y el del mostrador, ya impresos.</div>
@@ -39384,9 +39386,10 @@ footer .ancho{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px
 
 <section class="final"><div class="ancho">
 <h2>&iquest;Le late para su negocio?</h2>
-<p class="sub" style="margin-left:auto;margin-right:auto">Preg&uacute;ntenos lo que quiera. Si nos dice en qu&eacute; colonia est&aacute;, se lo llevamos a ense&ntilde;ar funcionando, sin compromiso.</p>
+<p class="sub" style="margin-left:auto;margin-right:auto">Preg&uacute;ntenos lo que quiera. Le contestamos al momento y le mandamos su caja a cualquier parte de M&eacute;xico.</p>
 <div class="botones">
 <a class="btn naranja" href="/pregunta">Preg&uacute;ntenos</a>
+<a class="btn borde" href="/comprar">Ver c&oacute;mo comprar</a>
 <a class="btn borde wa" id="wa" target="_blank" rel="noopener">Escr&iacute;banos por WhatsApp</a>
 </div>
 </div></section>
@@ -39443,13 +39446,14 @@ h1{font-size:24px;line-height:1.2;margin:18px 0 6px;font-weight:900}
 </style></head><body><div class="tapa">
 <div class="marca">LA CARTA<small>COMANDERO C1</small></div>
 <h1>Preg&uacute;nteme lo que quiera</h1>
-<p class="baja">Le contesto al momento, a cualquier hora. Si prefiere hablar con una persona, use el bot&oacute;n verde.</p>
+<p class="baja">Le contesto al momento, a cualquier hora. Le mandamos su caja a cualquier parte de M&eacute;xico.<span id="conPersona" style="display:none"> Si prefiere hablar con una persona, use el bot&oacute;n verde.</span></p>
 <div id="chat"></div>
 <div class="rapidas" id="rapidas">
 <button type="button">&iquest;Cu&aacute;nto cuesta?</button>
 <button type="button">&iquest;Qu&eacute; trae la caja?</button>
 <button type="button">&iquest;Funciona con mi celular?</button>
 <button type="button">&iquest;Hay pago mensual?</button>
+<button type="button">&iquest;Me lo mandan a mi ciudad?</button>
 </div>
 <div class="escribe">
 <textarea id="t" rows="1" placeholder="Escriba su pregunta"></textarea>
@@ -39474,6 +39478,7 @@ h1{font-size:24px;line-height:1.2;margin:18px 0 6px;font-weight:900}
     var wa = document.getElementById("wa");
     wa.href = "https://wa.me/" + WA + "?text=" + encodeURIComponent("Hola, vi La Carta y quiero informes.");
     wa.style.display = "block";
+    document.getElementById("conPersona").style.display = "inline";
   }
   if (TIPO) document.getElementById("ver").href = "/video?t=" + encodeURIComponent(TIPO);
   function burbuja(texto, quien){
@@ -39574,7 +39579,7 @@ li{margin-bottom:5px}
 <li><b>Recargas de Beto:</b> $100 por 300 pl&aacute;ticas m&aacute;s. No se vencen.</li>
 </ul>
 <p>Los precios son en pesos mexicanos y son los que est&aacute;n publicados en lacartamenu.com el d&iacute;a de su compra. Se cobra exactamente el precio publicado: no se agrega nada al pagar.</p>
-<p>Los pagos en l&iacute;nea los procesan <b>Stripe</b> (tarjeta, OXXO o transferencia) y <b>Mercado Pago</b> (tarjeta a meses). Nosotros nunca vemos los datos de su tarjeta. Tambi&eacute;n puede pagar en efectivo con la persona que se lo instala.</p>
+<p>Los pagos en l&iacute;nea los procesan <b>Stripe</b> (tarjeta, OXXO o transferencia) y <b>Mercado Pago</b> (tarjeta a meses). Nosotros nunca vemos los datos de su tarjeta. En Manzanillo, Colima, Tecom&aacute;n y Ciudad Guzm&aacute;n tambi&eacute;n puede pagar en efectivo con la persona que se lo instala.</p>
 <p><b>Por ahora no emitimos factura.</b> Los tickets que imprime el equipo son informativos, no comprobantes fiscales.</p>
 
 <h2>5. Renovaci&oacute;n, cancelaci&oacute;n y falta de pago</h2>
@@ -39891,6 +39896,8 @@ function pintaEnvio(){
 (function(){
   var ops = document.querySelectorAll('.envop');
   for (var i = 0; i < ops.length; i++) ops[i].onclick = function(){ ENV.modo = this.getAttribute('data-env'); pintaEnvio(); };
+  /* La entrega en persona solo existe con vendedor: sin su liga no se ensena. */
+  if (!qs.get('v')) { var enPersona = document.querySelector('.envop[data-env="vendedor"]'); if (enPersona) enPersona.style.display = 'none'; }
   pintaEnvio();
 })();
 function envioListo(){
