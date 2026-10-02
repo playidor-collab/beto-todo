@@ -38454,7 +38454,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.55";  // version: "2.9.55"
+var VERSION_BETO = "2.9.56";  // version: "2.9.56"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39659,7 +39659,7 @@ li{margin-bottom:5px}
 <li>Lo que le escribes a Beto, el asistente que contesta por el negocio.</li>
 </ul>
 <p><b>Si vendes La Carta:</b> tu nombre, tu tel&eacute;fono, tu usuario de Telegram, las visitas que registras y las dudas que haces, tambi&eacute;n las de voz.</p>
-<p><b>Si nos escribes para pedir informes</b> (en lacartamenu.com/pregunta): lo que escribes y, si nos lo das, el nombre de tu negocio, tu colonia, tu nombre y tu tel&eacute;fono, para contestarte y para que alguien de La Carta te pueda visitar.</p>
+<p><b>Si nos escribes para pedir informes</b> (en lacartamenu.com/pregunta): lo que escribes y, si nos lo das, el nombre de tu negocio, tu colonia, tu nombre y tu tel&eacute;fono, para contestarte, mandarte tu caja si la compras y, si est&aacute;s en Manzanillo, Colima, Tecom&aacute;n o Ciudad Guzm&aacute;n, para que alguien de La Carta te pueda visitar.</p>
 <p><b>No te pedimos datos sensibles</b> (salud, religi&oacute;n, origen, preferencias ni nada parecido).</p>
 
 <h2>3. Para qu&eacute; los usamos</h2>
