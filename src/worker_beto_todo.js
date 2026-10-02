@@ -36360,7 +36360,7 @@ function enviaSucursalDatos(b) {
 /* /envia-prueba: llamadas que NO cuestan, para ver que la llave sirve. */
 async function enviaPrueba(env) {
   if (!String(env.ENVIA_TOKEN || "").trim()) return { ok: false, motivo: "falta ENVIA_TOKEN" };
-  const ya = await stripeLee(env, "envia/prueba3.json");
+  const ya = await stripeLee(env, "envia/prueba4.json");
   if (ya && Date.now() - Number(ya.ms || 0) < 10 * 6e4) return Object.assign({ guardada: true }, ya);
   const destino = { name: "Prueba", phone: "5500000000", street: "Calle Prueba", number: "1", district: "Juarez",
     city: "Ciudad de Mexico", state: "CX", country: "MX", postalCode: "06600", reference: "" };
@@ -36401,9 +36401,18 @@ async function enviaPrueba(env) {
     try { const l = enviaLista(await enviaPide(env, ENVIA_QUERIES, camino)); sal[nom] = { cuantas: l.length, primera: l[0] || null }; }
     catch (e) { sal.errores[nom] = enviaMotivo(e); }
   }
+  const crudo = async (metodo, camino, cuerpo) => {
+    const op = { method: metodo, headers: { "authorization": "Bearer " + String(env.ENVIA_TOKEN || "").trim(), "content-type": "application/json", "accept": "application/json" } };
+    if (cuerpo) op.body = JSON.stringify(cuerpo);
+    const r = await fetch(ENVIA_QUERIES + camino, op);
+    return { status: r.status, texto: (await r.text()).slice(0, 600) };
+  };
+  try { sal.crudo_get_pp = await crudo("GET", "/branches/puntopost/MX?zipcode=06600&type=2"); } catch (e) { sal.errores.crudo_get_pp = String(e).slice(0, 80); }
+  try { sal.crudo_post_pp = await crudo("POST", "/branches/puntopost/MX", { zipcode: "06600", type: 2, packages: [{ weight: 1, length: 25, width: 20, height: 10, amount: 1 }] }); } catch (e) { sal.errores.crudo_post_pp = String(e).slice(0, 80); }
+  try { sal.crudo_get_fedex = await crudo("GET", "/branches/fedex/MX?zipcode=06600"); } catch (e) { sal.errores.crudo_get_fedex = String(e).slice(0, 80); }
   sal.llave_aceptada = Object.keys(sal.tarifas).length > 0;
   if (!sal.llave_aceptada) sal.ok = false;
-  await stripeGuarda(env, "envia/prueba3.json", sal);
+  await stripeGuarda(env, "envia/prueba4.json", sal);
   return sal;
 }
 async function enviaGuia(env, id, prueba) {
@@ -38447,7 +38456,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.52";  // version: "2.9.52"
+var VERSION_BETO = "2.9.53";  // version: "2.9.53"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
