@@ -37953,7 +37953,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.43";  // version: "2.9.43"
+var VERSION_BETO = "2.9.44";  // version: "2.9.44"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -42443,6 +42443,21 @@ await chatAvisar(env, cfg,
               : /^whsec_/.test(k) ? "es una firma (whsec_)" : /^sk_/.test(k) ? "es una llave NO restringida (sk_)" : "rara";
             const firma = !f ? "falta" : /^whsec_[A-Za-z0-9]{20,}$/.test(f) ? "bien" : /^(rk|sk)_/.test(f) ? "es una llave (rk_)" : "rara";
             return { llave, firma, prendido: hayStripe(env) };
+          })(),
+          cobro: (() => {
+            const t = (x) => String(env[x] || "").trim();
+            const forma = (x, re) => !t(x) ? "falta" : re.test(t(x)) ? "bien" : "rara";
+            return {
+              llave: forma("COBRO_LLAVE", /^[A-Za-z0-9+/]{42,44}={0,2}$/),
+              mp_app_id: forma("MP_APP_ID", /^[0-9]{5,25}$/),
+              mp_app_secret: !t("MP_APP_SECRET") ? "falta" : t("MP_APP_SECRET").length >= 16 && !/^(APP_USR|TEST)-/.test(t("MP_APP_SECRET")) ? "bien" : "rara",
+              mp_firma: t("MP_COBRO_FIRMA") ? "puesta" : "falta",
+              stripe_connect_id: forma("STRIPE_CONNECT_ID", /^ca_[A-Za-z0-9]{10,}$/),
+              stripe_connect_key: forma("STRIPE_CONNECT_KEY", /^(rk|sk)_(live|test)_[A-Za-z0-9]{20,}$/),
+              stripe_connect_firma: forma("STRIPE_CONNECT_FIRMA", /^whsec_[A-Za-z0-9]{20,}$/),
+              mp_listo: cobroMpListo(env), stripe_listo: cobroStripeListo(env),
+              solo: t("COBRO_SOLO") || "(todos)"
+            };
           })(),
           hora_mexico: fechaHoraMX(),
           rutas: [
