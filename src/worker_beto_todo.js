@@ -36357,6 +36357,32 @@ function enviaSucursalDatos(b) {
 }
 /* LA GUIA. Idempotente: el campo "guia" se marca "en_proceso" con escritura
    condicionada ANTES de llamar a Envia; si ya tiene algo, no hace nada. */
+/* /envia-prueba: llamadas que NO cuestan, para ver que la llave sirve. */
+async function enviaPrueba(env) {
+  if (!String(env.ENVIA_TOKEN || "").trim()) return { ok: false, motivo: "falta ENVIA_TOKEN" };
+  const ya = await stripeLee(env, "envia/prueba.json");
+  if (ya && Date.now() - Number(ya.ms || 0) < 10 * 6e4) return Object.assign({ guardada: true }, ya);
+  const destino = { name: "Prueba", phone: "5500000000", street: "Calle Prueba", number: "1", district: "Juarez",
+    city: "Ciudad de Mexico", state: "CX", country: "MX", postalCode: "06600", reference: "" };
+  const sal = { ok: true, ms: Date.now(), fecha: isoMX(), destino_cp: "06600", tarifas: {}, errores: {} };
+  const corto = (t) => ({ servicio: String(t.service || ""), nombre: String(t.serviceDescription || "").slice(0, 60),
+    dropOff: t.dropOff, entrega: String(t.dropOffDescription || ""), precio: t.totalPrice, dias: String(t.deliveryEstimate || "") });
+  let slug = "puntopost";
+  try { slug = await enviaSlugPuntoPost(env); } catch (e) {}
+  sal.puntopost_se_llama = slug;
+  for (const c of ENVIA_DOMICILIO_PAQ.concat([slug])) {
+    try { sal.tarifas[c] = (await enviaTarifas(env, c, ENVIA_ORIGEN, destino)).map(corto); }
+    catch (e) { sal.errores[c] = enviaMotivo(e); }
+  }
+  for (const [nom, cp, tipo] of [["puntopost_origen_28219", ENVIA_ORIGEN.postalCode, 1], ["puntopost_destino_06600", "06600", 2]]) {
+    try { const b = await enviaSucursal(env, slug, cp, tipo); sal[nom] = b ? enviaSucursalDatos(b) : "no hay cerca"; }
+    catch (e) { sal.errores[nom] = enviaMotivo(e); }
+  }
+  sal.llave_aceptada = Object.keys(sal.tarifas).length > 0;
+  if (!sal.llave_aceptada) sal.ok = false;
+  await stripeGuarda(env, "envia/prueba.json", sal);
+  return sal;
+}
 async function enviaGuia(env, id, prueba) {
   if (!String(env.ENVIA_TOKEN || "").trim()) return { ok: false, motivo: "sin_llave" };
   const x = await enviaLeeConEtag(env, id);
@@ -38398,7 +38424,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.49";  // version: "2.9.49"
+var VERSION_BETO = "2.9.50";  // version: "2.9.50"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -42158,6 +42184,11 @@ await chatAvisar(env, cfg,
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
+    }
+    if (ruta === "/envia-prueba") {
+      let salida;
+      try { salida = await enviaPrueba(env); } catch (e) { salida = { ok: false, motivo: String(e && e.message || e).slice(0, 120) }; }
+      return json(salida, 200);
     }
     if (ruta === "/ayuda" || ruta === "/ayudakit") {
       return new Response(HTML_AYUDA, {
