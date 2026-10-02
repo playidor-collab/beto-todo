@@ -37225,7 +37225,7 @@ async function mpCobrar(env, pagoId) {
     return { ok: true, motivo: "no_aprobado", estado: String(pago.status || "") };
   }
   const ref = String(pago.external_reference || "");
-  if (/^kit[ce]|/.test(ref)) {
+  if (/^kit[ce][|]/.test(ref)) {
     const eid = pago.metadata && pago.metadata.envio;
     if (eid) { try { await envioPagado(env, eid, "Mercado Pago", Number(pago.transaction_amount || 0), ""); } catch (e) {} }
     return { ok: true, motivo: "kit" };
@@ -38039,7 +38039,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.45";  // version: "2.9.45"
+var VERSION_BETO = "2.9.45.1";  // version: "2.9.45.1"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
