@@ -35985,6 +35985,7 @@ async function kitSuscribirStripe(env, clave, d) {
   const reg = await leeSuscripcion(env, d.id);
   if (reg.stripe_sub) throw new Error("esa suscripción ya está activa");
   const efectivo = !!(d && d.efectivo) || !!reg.enganche_aparte;
+  const envio = efectivo ? null : await leeEnvio(env, reg.envio);
   const base = origenPublico("", String(d && d.__origen || ""));
   const cli = await stripePide(env, "POST", "/v1/customers", [
     ["description", "Suscripción La Carta · " + reg.negocio], ["name", String(reg.dueno || "").slice(0, 60)],
@@ -36013,6 +36014,7 @@ async function kitSuscribirStripe(env, clave, d) {
       ["line_items[1][price_data][product_data][name]", "La Carta · Comandero C1 · enganche"],
       ["line_items[1][price_data][product_data][description]", "Impresora, rollos, códigos QR y 300 pláticas con Beto. Por ahora no emitimos factura."]);
   }
+  envioStripe(p, envio);
   const ses = await stripePide(env, "POST", "/v1/checkout/sessions", p, "sus-" + reg.id + "-" + (efectivo ? "e" : "t") + "-" + Math.floor(Date.now() / 6e4));
   const liga = String(ses.url || "");
   if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
@@ -36027,12 +36029,13 @@ async function kitEngancheStripe(env, clave, d) {
   const reg = await leeSuscripcion(env, d.id);
   if (reg.stripe_sub) throw new Error("esa suscripción ya está activa");
   const base = origenPublico("", String(d && d.__origen || ""));
+  const envio = await leeEnvio(env, reg.envio);
   const cli = await stripePide(env, "POST", "/v1/customers", [
     ["description", "Enganche La Carta · " + reg.negocio], ["name", String(reg.dueno || "").slice(0, 60)],
     ["email", reg.correo], ["metadata[suscripcion]", reg.id]
   ], "eng-cli-" + reg.id);
   if (!/^cus_/.test(String(cli.id || ""))) throw new Error("Stripe no abrió la cuenta del cliente");
-  const ses = await stripeSesionPago(env, [
+  const ses = await stripeSesionPago(env, envioStripe([
     ["mode", "payment"], ["customer", cli.id], ["client_reference_id", reg.id], ["locale", "es-419"],
     ["line_items[0][quantity]", "1"],
     ["line_items[0][price_data][currency]", "mxn"],
@@ -36046,7 +36049,7 @@ async function kitEngancheStripe(env, clave, d) {
     ["payment_method_options[oxxo][expires_after_days]", "3"],
     ["payment_method_options[customer_balance][funding_type]", "bank_transfer"],
     ["payment_method_options[customer_balance][bank_transfer][type]", "mx_bank_transfer"]
-  ], "eng-" + reg.id + "-" + Math.floor(Date.now() / 6e4));
+  ], envio), "eng-" + reg.id + "-" + Math.floor(Date.now() / 6e4));
   const liga = String(ses.url || "");
   if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
   reg.enganche_aparte = true; reg.enganche = "stripe";
@@ -36063,7 +36066,7 @@ async function stripeEngancheAviso(env, tipo, o, prueba) {
   if (tipo === "checkout.session.async_payment_succeeded") estado = "pagado";
   if (tipo === "checkout.session.async_payment_failed") estado = "vencio";
   if (!estado) return { enganche: "nada", evento: tipo };
-  if (estado === "pagado" && !(Number(o.amount_total) === SUSCRIPCION.enganche * 100 && String(o.currency || "").toLowerCase() === "mxn")) estado = "revisar";
+  if (estado === "pagado" && !(Number(o.amount_total) === (SUSCRIPCION.enganche + (Number(md.envio_costo) || 0)) * 100 && String(o.currency || "").toLowerCase() === "mxn")) estado = "revisar";
   if (reg) {
     if (reg.enganche_pagado && estado !== "pagado") return { enganche: "ya_pagado" };
     if (estado === "pagado" && reg.enganche_pagado) return { enganche: "ya_pagado" };
@@ -36130,11 +36133,79 @@ async function stripeSuscripcionAviso(env, tipo, o, prueba) {
   return { nada: tipo };
 }
 /* EL KIT DE CONTADO. Lo pide un desconocido desde la calle: no prende nada. */
+/* EL ENVIO DEL KIT (2.9.45). Gratis a sucursal PuntoPost (lo paga La Carta)
+   o a domicilio por $170 (lo paga el cliente). */
+var ENVIO_DOMICILIO = 170;
+async function kitEnvio(env, clave, d) {
+  const corta = (t, n) => String(t || "").replace(/[<>&]/g, "").replace(/\s+/g, " ").trim().slice(0, n);
+  const modo = String(d && d.modo || "");
+  if (modo !== "sucursal" && modo !== "domicilio") throw new Error("escoge cómo te llega tu caja");
+  const reg = {
+    modo, costo: modo === "domicilio" ? ENVIO_DOMICILIO : 0,
+    recibe: corta(d.recibe, 60), telefono: soloNumeros(d.telefono).slice(-10),
+    calle: corta(d.calle, 90), colonia: corta(d.colonia, 60), cp: soloNumeros(d.cp).slice(0, 5),
+    ciudad: corta(d.ciudad, 60), estado: corta(d.estado, 40), referencias: corta(d.referencias, 120),
+    fecha: isoMX(), estado_envio: "sin_pagar"
+  };
+  if (reg.recibe.length < 3) throw new Error("escribe quién va a recibir la caja");
+  if (reg.telefono.length < 10) throw new Error("escribe un teléfono de 10 números para la paquetería");
+  if (reg.calle.length < 3) throw new Error("escribe la calle y el número");
+  if (reg.colonia.length < 2) throw new Error("escribe la colonia");
+  if (!/^\d{5}$/.test(reg.cp)) throw new Error("el código postal son 5 números");
+  if (reg.ciudad.length < 2) throw new Error("escribe la ciudad o municipio");
+  if (reg.estado.length < 2) throw new Error("escribe el estado");
+  reg.id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  await stripeGuarda(env, "envios/" + reg.id + ".json", reg);
+  return { ok: true, tipo: "kit_envio", id: reg.id, costo: reg.costo };
+}
+async function leeEnvio(env, id) {
+  const limpio = String(id || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  if (!limpio) return null;
+  const reg = await stripeLee(env, "envios/" + limpio + ".json");
+  if (!reg) throw new Error("no encontré tu dirección de envío; vuelve a escribirla");
+  return reg;
+}
+/* Suma el envio a una sesion de Stripe (lista de pares) y lo apunta en metadata. */
+function envioStripe(p, envio) {
+  if (!envio) return p;
+  const n = p.filter((x) => /^line_items\[\d+\]\[quantity\]$/.test(x[0])).length;
+  if (envio.costo > 0) {
+    const L = "line_items[" + n + "]";
+    p.push([L + "[quantity]", "1"], [L + "[price_data][currency]", "mxn"],
+      [L + "[price_data][unit_amount]", String(envio.costo * 100)],
+      [L + "[price_data][product_data][name]", "Envío a domicilio"],
+      [L + "[price_data][product_data][description]", ("FedEx o Paquetexpress a " + envio.ciudad + ", " + envio.estado + ".").slice(0, 200)]);
+  }
+  p.push(["metadata[envio]", envio.id], ["metadata[envio_costo]", String(envio.costo)]);
+  return p;
+}
+function envioMp(envio, items) {
+  if (envio && envio.costo > 0) items.push({ id: "envio-domicilio", title: "Envío a domicilio", description: "FedEx o Paquetexpress", quantity: 1, unit_price: envio.costo, currency_id: "MXN" });
+  return items;
+}
+function textoEnvio(r) {
+  return (r.modo === "domicilio" ? "\u{1F69A} A DOMICILIO (pagó $" + r.costo + " de envío): FedEx Económico o Paquetexpress." :
+    "\u{1F3EA} GRATIS a la sucursal PuntoPost más cercana al CP " + r.cp + ". Si no hay PuntoPost, llámale antes de mandarla.") +
+    "\nRecibe: " + r.recibe + " · Tel: " + r.telefono +
+    "\n" + r.calle + ", col. " + r.colonia + "\nCP " + r.cp + ", " + r.ciudad + ", " + r.estado +
+    (r.referencias ? "\nReferencias: " + r.referencias : "");
+}
+/* Cuando el pago ya entro: avisa a Edsi UNA vez con la direccion. */
+async function envioPagado(env, id, como, monto, prueba) {
+  const limpio = String(id || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  const reg = limpio ? await stripeLee(env, "envios/" + limpio + ".json") : null;
+  if (!reg || reg.estado_envio === "pagado") return false;
+  reg.estado_envio = "pagado"; reg.pagado = isoMX(); reg.como = como;
+  await stripeGuarda(env, "envios/" + limpio + ".json", reg);
+  await avisaEdsiRed(env, "\u{1F4E6} <b>Mándale su caja</b>" + (prueba || "") + " — pagó $" + monto + " por " + como + "\n" + textoEnvio(reg));
+  return true;
+}
 async function kitContado(env, clave, d) {
   if (!hayStripe(env)) throw new Error("todavía no se puede pagar así; paga en efectivo con quien te atendió");
   const base = origenPublico("", String(d && d.__origen || ""));
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const vendedor = String(d && d.vendedor || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 20).toUpperCase();
+  const envio = await leeEnvio(env, d && d.envio);
   const cli = await stripePide(env, "POST", "/v1/customers",
     [["description", "Comprador del kit La Carta " + id], ["metadata[compra]", id]], "cli-" + id);
   if (!/^cus_/.test(String(cli.id || ""))) throw new Error("Stripe no abrió la cuenta del comprador");
@@ -36158,10 +36229,11 @@ async function kitContado(env, clave, d) {
     ["payment_method_options[customer_balance][funding_type]", "bank_transfer"],
     ["payment_method_options[customer_balance][bank_transfer][type]", "mx_bank_transfer"]
   ];
+  envioStripe(p, envio);
   const ses = await stripeSesionPago(env, p, "kit-" + id);
   const liga = String(ses.url || "");
   if (!/^https:\/\/checkout\.stripe\.com\//.test(liga)) throw new Error("no se pudo abrir la página de pago; no se cobró nada");
-  await stripeGuarda(env, "compras/" + id + ".json", { id, que: "kit", monto: KIT_CONTADO, vendedor, fecha: isoMX(), estado: "abierta", sesion: String(ses.id || "") });
+  await stripeGuarda(env, "compras/" + id + ".json", { id, que: "kit", monto: KIT_CONTADO, vendedor, envio: envio ? envio.id : "", fecha: isoMX(), estado: "abierta", sesion: String(ses.id || "") });
   return { ok: true, tipo: "kit_contado", liga };
 }
 /* EL AVISO DE STRIPE. Contesta 200 si ya quedo (o si no nos importa), 400 si
@@ -36189,6 +36261,9 @@ async function stripeProcesa(env, ev) {
   const o = (ev.data && ev.data.object) || {};
   const md = o.metadata || {};
   const prueba = ev.livemode === true ? "" : " <i>(prueba)</i>";
+  if (md.envio && ((tipo === "checkout.session.completed" && o.payment_status === "paid") || tipo === "checkout.session.async_payment_succeeded")) {
+    try { await envioPagado(env, md.envio, "Stripe", Number(o.amount_total) / 100, prueba); } catch (e) {}
+  }
   if ((tipo === "checkout.session.completed" && md.que === "suscripcion") || tipo === "invoice.paid" || tipo === "invoice.payment_failed" ||
       tipo === "customer.subscription.updated" || tipo === "customer.subscription.deleted") {
     return await stripeSuscripcionAviso(env, tipo, o, prueba);
@@ -36220,7 +36295,7 @@ async function stripeProcesa(env, ev) {
     if (tipo === "checkout.session.expired") estado = "sin_pagar";
     if (!estado) return { nada: tipo };
     if (reg.estado === "pagado" && estado !== "pagado") return { compra: id, estado: "pagado" };
-    if (estado === "pagado" && !(Number(o.amount_total) === KIT_CONTADO * 100 && String(o.currency || "").toLowerCase() === "mxn")) estado = "revisar";
+    if (estado === "pagado" && !(Number(o.amount_total) === (KIT_CONTADO + (Number(md.envio_costo) || 0)) * 100 && String(o.currency || "").toLowerCase() === "mxn")) estado = "revisar";
     const yaPagado = reg.estado === "pagado";
     reg.estado = estado;
     reg["cuando_" + estado] = isoMX();
@@ -36245,7 +36320,7 @@ async function kitSuscribir(env, clave, d) {
   const reg = {
     negocio: corta(d.negocio, 60), dueno: corta(d.dueno, 60),
     telefono: corta(d.telefono, 20), correo: corta(d.correo, 80).toLowerCase(),
-    vendedor: corta(d.vendedor, 20).toUpperCase(), fecha: isoMX(), estado: "datos"
+    vendedor: corta(d.vendedor, 20).toUpperCase(), envio: String(d.envio || "").replace(/[^a-z0-9]/g, "").slice(0, 20), fecha: isoMX(), estado: "datos"
   };
   if (reg.negocio.length < 2) throw new Error("falta el nombre del negocio");
   if (reg.dueno.length < 2) throw new Error("falta tu nombre");
@@ -36267,12 +36342,14 @@ async function leeSuscripcion(env, id) {
 async function kitEnganche(env, clave, d) {
   if (!hayMercadoPago(env)) throw new Error("todavía no se puede pagar desde aquí");
   const reg = await leeSuscripcion(env, d.id);
+  const envio = await leeEnvio(env, reg.envio);
   const base = origenPublico("", String(d && d.__origen || ""));
   const r = await fetch(MP_API + "/checkout/preferences", {
     method: "POST",
     headers: { "content-type": "application/json", "authorization": "Bearer " + String(env.MP_TOKEN).trim(), "x-idempotency-key": "eng-" + reg.id + "-" + Date.now() },
     body: JSON.stringify({
-      items: [{ id: "kit-c1-enganche", title: "La Carta · Comandero C1 · Enganche de suscripción", description: "Enganche de la suscripción: impresora, rollos, códigos y 300 pláticas con Beto.", quantity: 1, unit_price: SUSCRIPCION.enganche, currency_id: "MXN" }],
+      items: envioMp(envio, [{ id: "kit-c1-enganche", title: "La Carta · Comandero C1 · Enganche de suscripción", description: "Enganche de la suscripción: impresora, rollos, códigos y 300 pláticas con Beto.", quantity: 1, unit_price: SUSCRIPCION.enganche, currency_id: "MXN" }]),
+      metadata: envio ? { envio: envio.id } : undefined,
       /* "kite" no es ningun negocio ni tanque: el aviso de recargas lo descarta. */
       external_reference: "kite|" + reg.id,
       payer: { email: reg.correo },
@@ -37002,6 +37079,7 @@ async function kitComprar(env, clave, d) {
   const p = plazoDe(d && d.meses);
   if (!p) throw new Error("ese plazo no existe");
   const base = origenPublico("", origen);
+  const envio = await leeEnvio(env, d && d.envio);
   const cuerpo = {
     items: [{
       id: "kit-c1-" + p.meses,
@@ -37031,6 +37109,8 @@ async function kitComprar(env, clave, d) {
     },
     statement_descriptor: "LA CARTA"
   };
+  cuerpo.items = envioMp(envio, cuerpo.items);
+  if (envio) cuerpo.metadata.envio = envio.id;
   const r = await fetch(MP_API + "/checkout/preferences", {
     method: "POST",
     headers: {
@@ -37145,6 +37225,11 @@ async function mpCobrar(env, pagoId) {
     return { ok: true, motivo: "no_aprobado", estado: String(pago.status || "") };
   }
   const ref = String(pago.external_reference || "");
+  if (/^kit[ce]|/.test(ref)) {
+    const eid = pago.metadata && pago.metadata.envio;
+    if (eid) { try { await envioPagado(env, eid, "Mercado Pago", Number(pago.transaction_amount || 0), ""); } catch (e) {} }
+    return { ok: true, motivo: "kit" };
+  }
   const partes = ref.split("|");
   const cual = String(partes[0] || "").trim().toLowerCase();
   const t = tanqueDe(partes[1]);
@@ -37590,6 +37675,7 @@ var ESCRITURAS = {
   cobro_renovar: cobroRenovar,
   kit_comprar: kitComprar,
   kit_contado: kitContado,
+  kit_envio: kitEnvio,
   prospecto_charla: prospectoCharla,
   kit_suscribir: kitSuscribir,
   kit_enganche: kitEnganche,
@@ -37953,7 +38039,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.44";  // version: "2.9.44"
+var VERSION_BETO = "2.9.45";  // version: "2.9.45"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39217,12 +39303,35 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 .msg.on{display:block}
 .msg.ok{background:#14301f;color:#a8e8c4}
 .pie{margin-top:26px;padding-top:15px;border-top:1px solid #232a30;font-size:12.5px;line-height:1.55;color:#78838f}
+.envop.si{border-color:#8fd6ac;background:#16261d}
+.campo{width:100%;margin:0 0 9px;padding:13px 14px;border-radius:11px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;font-size:15px;font-family:inherit}
 </style></head><body><div class="tapa">
 <div class="marca">LA CARTA<small>COMANDERO C1</small></div>
 
 <h1>P&aacute;galo con tu tarjeta,<br>a meses sin intereses.</h1>
 <p class="baja">De contado son <b>$3,700</b> en efectivo, con quien te lo ense&ntilde;&oacute;. Con tarjeta de cr&eacute;dito:</p>
 <p class="ay" style="margin:-8px 0 16px">Por ahora no emitimos factura.</p>
+
+<div id="envBox" style="margin:0 0 26px">
+<label>&iquest;C&oacute;mo te llega tu caja?</label>
+<button class="plazo envop" data-env="sucursal"><span class="mes">Gratis a una sucursal PuntoPost</span>
+  <span class="cuota"><b>$0</b><span>7 a 10 d&iacute;as &middot; la recoges t&uacute;</span></span></button>
+<button class="plazo envop" data-env="domicilio"><span class="mes">A la puerta de tu negocio</span>
+  <span class="cuota"><b>+$170</b><span>FedEx o Paquetexpress &middot; 4 a 7 d&iacute;as</span></span></button>
+<button class="plazo envop" data-env="vendedor"><span class="mes">Me la entrega quien me la ense&ntilde;&oacute;</span>
+  <span class="cuota"><b>$0</b><span>en persona</span></span></button>
+<div id="envDatos" style="margin-top:6px">
+<input class="campo" id="eRec" placeholder="Qui&eacute;n recibe la caja" autocomplete="name">
+<input class="campo" id="eTel" placeholder="Tel&eacute;fono (10 n&uacute;meros)" inputmode="tel" autocomplete="tel">
+<input class="campo" id="eCalle" placeholder="Calle y n&uacute;mero" autocomplete="address-line1">
+<input class="campo" id="eCol" placeholder="Colonia">
+<input class="campo" id="eCp" placeholder="C&oacute;digo postal (5 n&uacute;meros)" inputmode="numeric" maxlength="5" autocomplete="postal-code">
+<input class="campo" id="eCiu" placeholder="Ciudad o municipio" autocomplete="address-level2">
+<input class="campo" id="eEdo" placeholder="Estado" autocomplete="address-level1">
+<input class="campo" id="eRef" placeholder="Entre qu&eacute; calles o una referencia (opcional)">
+</div>
+<p class="ay" id="envNota" style="margin-top:4px"></p>
+</div>
 
 <label>A 3 meses sin intereses</label>
 <button class="plazo" data-meses="3"><span class="mes">3 meses</span>
@@ -39264,8 +39373,36 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 </div>
 <script>
 var m = document.getElementById('m');
-function avisa(t, bien){ m.className = 'msg on' + (bien ? ' ok' : ''); m.innerHTML = t; }
+function avisa(t, bien){ m.className = 'msg on' + (bien ? ' ok' : ''); m.innerHTML = String(t).replace(/^Error: */, ''); }
 var qs = new URLSearchParams(location.search), pago = qs.get('pago') || '';
+/* EL ENVIO: se guarda la direccion antes de abrir cualquier pago. */
+var ENV = { modo: qs.get('v') ? 'vendedor' : 'sucursal', id: '', firma: '' };
+function $e(i){ return document.getElementById(i); }
+function pintaEnvio(){
+  var ops = document.querySelectorAll('.envop');
+  for (var i = 0; i < ops.length; i++) ops[i].className = 'plazo envop' + (ops[i].getAttribute('data-env') === ENV.modo ? ' si' : '');
+  $e('envDatos').style.display = ENV.modo === 'vendedor' ? 'none' : 'block';
+  $e('envNota').innerHTML = ENV.modo === 'domicilio' ? 'Se suman <b>$170</b> de env&iacute;o a tu pago. Te llega a la puerta con FedEx o Paquetexpress y te pasamos tu n&uacute;mero de gu&iacute;a.'
+    : ENV.modo === 'sucursal' ? 'Te la mandamos <b>gratis</b> a la sucursal PuntoPost m&aacute;s cercana a tu c&oacute;digo postal y te llamamos para decirte d&oacute;nde recogerla. Si en tu ciudad no hay PuntoPost, te llamamos antes de mandarla.'
+    : 'La caja te la da en persona quien te ense&ntilde;&oacute; La Carta.';
+}
+(function(){
+  var ops = document.querySelectorAll('.envop');
+  for (var i = 0; i < ops.length; i++) ops[i].onclick = function(){ ENV.modo = this.getAttribute('data-env'); pintaEnvio(); };
+  pintaEnvio();
+})();
+function envioListo(){
+  if (ENV.modo === 'vendedor') return Promise.resolve('');
+  var d = { modo: ENV.modo, recibe: $e('eRec').value, telefono: $e('eTel').value, calle: $e('eCalle').value, colonia: $e('eCol').value,
+    cp: $e('eCp').value, ciudad: $e('eCiu').value, estado: $e('eEdo').value, referencias: $e('eRef').value };
+  var f = JSON.stringify(d);
+  if (ENV.id && ENV.firma === f) return Promise.resolve(ENV.id);
+  return fetch('/beto-guarda', { method: 'POST', headers: {'content-type':'application/json'},
+    body: JSON.stringify({ c: 'kit', tipo: 'kit_envio', datos: d }) }).then(function(r){ return r.json(); }).then(function(r){
+    if (!r || !r.ok) { var e = new Error((r && r.error) || 'Revisa la direcci&oacute;n de env&iacute;o.'); e.envio = true; $e('envBox').scrollIntoView(); throw e; }
+    ENV.id = r.id; ENV.firma = f; return r.id;
+  });
+}
 if (pago === 'suscrito') avisa('<b>Listo, quedaste suscrito.</b> Cada mes se cobran $400 a tu tarjeta. Qui&eacute;n te atendi&oacute; ya lo ve.', true);
 else if (pago === 'ok') avisa('<b>Listo, tu pago entr&oacute;.</b> Qui&eacute;n te atendi&oacute; ya lo ve. Guarda el correo de Mercado Pago.', true);
 else if (pago === 'pendiente') avisa('Tu pago qued&oacute; en proceso. En cuanto lo aprueben, listo.', true);
@@ -39277,12 +39414,12 @@ else if (pago === 'stripe') avisa('<b>Listo, recibimos tu pedido.</b> Si pagaste
   if (!b) return;
   b.onclick = function(){
     b.disabled = true; var antes = b.innerHTML; b.innerHTML = '<span class="mes">Abriendo la p&aacute;gina de pago...</span>';
-    fetch('/beto-guarda', { method: 'POST', headers: {'content-type':'application/json'},
-      body: JSON.stringify({ c: 'kit', tipo: 'kit_contado', datos: { vendedor: qs.get('v') || '' } }) })
+    envioListo().then(function(eid){ return fetch('/beto-guarda', { method: 'POST', headers: {'content-type':'application/json'},
+      body: JSON.stringify({ c: 'kit', tipo: 'kit_contado', datos: { vendedor: qs.get('v') || '', envio: eid } }) }); })
     .then(function(r){ return r.json(); }).then(function(r){
       if (r && r.ok && r.liga) { location.href = r.liga; return; }
       b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo abrir el pago.');
-    }).catch(function(){ b.disabled = false; b.innerHTML = antes; avisa('No se pudo abrir el pago. Revisa tu se&ntilde;al.'); });
+    }).catch(function(e){ b.disabled = false; b.innerHTML = antes; avisa(e && e.envio ? e.message : 'No se pudo abrir el pago. Revisa tu se&ntilde;al.'); });
   };
 })();
 var botones = document.querySelectorAll('.plazo[data-meses]');
@@ -39317,10 +39454,10 @@ var botones = document.querySelectorAll('.plazo[data-meses]');
   function datos(luego, b){
     var d = { negocio: $s('sNeg').value, dueno: $s('sDue').value, telefono: $s('sTel').value, correo: $s('sCor').value, vendedor: qs.get('v') || '' };
     b.disabled = true; var antes = b.innerHTML; b.innerHTML = '<span class="mes">Un momento...</span>';
-    pideS('kit_suscribir', d).then(function(r){
+    envioListo().then(function(eid){ d.envio = eid; return pideS('kit_suscribir', d); }).then(function(r){
       if (!r || !r.ok) { b.disabled = false; b.innerHTML = antes; avisa((r && r.error) || 'No se pudo.'); return; }
       idS = r.id; luego(b, antes);
-    }).catch(function(){ b.disabled = false; b.innerHTML = antes; avisa('No se pudo. Revisa tu se&ntilde;al.'); });
+    }).catch(function(e){ b.disabled = false; b.innerHTML = antes; avisa(e && e.envio ? e.message : 'No se pudo. Revisa tu se&ntilde;al.'); });
   }
   $s('sEng').onclick = function(){
     datos(function(b, antes){
@@ -39349,18 +39486,18 @@ for (var i = 0; i < botones.length; i++) botones[i].addEventListener('click', fu
   for (var k = 0; k < botones.length; k++) botones[k].disabled = true;
   var antes = yo.innerHTML;
   yo.innerHTML = '<span class="mes">Abriendo Mercado Pago...</span>';
-  fetch('/beto-guarda', {
+  envioListo().then(function(eid){ return fetch('/beto-guarda', {
     method: 'POST', headers: {'content-type':'application/json'},
-    body: JSON.stringify({ c: 'kit', tipo: 'kit_comprar', datos: { meses: meses } })
-  }).then(function(r){ return r.json(); }).then(function(r){
+    body: JSON.stringify({ c: 'kit', tipo: 'kit_comprar', datos: { meses: meses, envio: eid } })
+  }); }).then(function(r){ return r.json(); }).then(function(r){
     if (r && r.ok && r.liga) { location.href = r.liga; return; }
     yo.innerHTML = antes;
     for (var k = 0; k < botones.length; k++) botones[k].disabled = false;
     avisa((r && r.error) ? r.error : 'No se pudo abrir el pago. Int&eacute;ntalo otra vez.');
-  }).catch(function(){
+  }).catch(function(e){
     yo.innerHTML = antes;
     for (var k = 0; k < botones.length; k++) botones[k].disabled = false;
-    avisa('No se pudo abrir el pago. Revisa tu se&ntilde;al.');
+    avisa(e && e.envio ? e.message : 'No se pudo abrir el pago. Revisa tu se&ntilde;al.');
   });
 });
 <\/script>
