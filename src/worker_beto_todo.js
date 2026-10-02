@@ -36360,7 +36360,7 @@ function enviaSucursalDatos(b) {
 /* /envia-prueba: llamadas que NO cuestan, para ver que la llave sirve. */
 async function enviaPrueba(env) {
   if (!String(env.ENVIA_TOKEN || "").trim()) return { ok: false, motivo: "falta ENVIA_TOKEN" };
-  const ya = await stripeLee(env, "envia/prueba4.json");
+  const ya = await stripeLee(env, "envia/prueba5.json");
   if (ya && Date.now() - Number(ya.ms || 0) < 10 * 6e4) return Object.assign({ guardada: true }, ya);
   const destino = { name: "Prueba", phone: "5500000000", street: "Calle Prueba", number: "1", district: "Juarez",
     city: "Ciudad de Mexico", state: "CX", country: "MX", postalCode: "06600", reference: "" };
@@ -36407,12 +36407,9 @@ async function enviaPrueba(env) {
     const r = await fetch(ENVIA_QUERIES + camino, op);
     return { status: r.status, texto: (await r.text()).slice(0, 600) };
   };
-  try { sal.crudo_get_pp = await crudo("GET", "/branches/puntopost/MX?zipcode=06600&type=2"); } catch (e) { sal.errores.crudo_get_pp = String(e).slice(0, 80); }
-  try { sal.crudo_post_pp = await crudo("POST", "/branches/puntopost/MX", { zipcode: "06600", type: 2, packages: [{ weight: 1, length: 25, width: 20, height: 10, amount: 1 }] }); } catch (e) { sal.errores.crudo_post_pp = String(e).slice(0, 80); }
-  try { sal.crudo_get_fedex = await crudo("GET", "/branches/fedex/MX?zipcode=06600"); } catch (e) { sal.errores.crudo_get_fedex = String(e).slice(0, 80); }
   sal.llave_aceptada = Object.keys(sal.tarifas).length > 0;
   if (!sal.llave_aceptada) sal.ok = false;
-  await stripeGuarda(env, "envia/prueba4.json", sal);
+  await stripeGuarda(env, "envia/prueba5.json", sal);
   return sal;
 }
 async function enviaGuia(env, id, prueba) {
@@ -36445,8 +36442,8 @@ async function enviaGuia(env, id, prueba) {
       const slug = await enviaSlugPuntoPost(env);
       suc = await enviaSucursal(env, slug, reg.cp, 2);
       if (!suc) {
-        await queda("sin_sucursal", { guia_motivo: "no hay PuntoPost cerca" });
-        await avisaEdsiRed(env, "⚠️ <b>No hay PuntoPost cerca del CP " + reg.cp + "</b>" + pr + ", llámale a " + reg.telefono + " antes de mandarla." +
+        await queda("guia_manual", { guia_motivo: "Envia no dio sucursal PuntoPost" });
+        await avisaEdsiRed(env, "🏪 <b>PuntoPost: haz esta guía a mano en Envia.com</b>" + pr + ". No pude escoger la sucursal sola: busca la PuntoPost más cercana al CP " + reg.cp + ". Si no hay, llámale a " + reg.telefono + " antes de mandarla." +
           "\n" + enviaEsc(reg.recibe) + " · " + enviaEsc(reg.ciudad) + ", " + enviaEsc(reg.estado) + "\nNo hice guía. Su página: " + enviaEsc(liga));
         return { ok: false, motivo: "sin_sucursal" };
       }
@@ -36573,7 +36570,7 @@ async function enviaPagina(env, id) {
   h += "</ol>";
   let nota = "";
   if (!reg.pagado) nota = "Todavía no nos llega tu pago. Si pagaste en OXXO o por transferencia, puede tardar unas horas.";
-  else if (!guiaLista) nota = reg.guia === "sin_sucursal" || reg.guia === "guia_fallo" ? "Ya estamos preparando tu caja. Te vamos a llamar para confirmar el envío."
+  else if (!guiaLista) nota = reg.guia === "sin_sucursal" || reg.guia === "guia_fallo" || reg.guia === "guia_manual" ? "Ya estamos preparando tu caja. Te vamos a llamar para confirmar el envío."
     : "Ya estamos preparando tu caja. En cuanto tenga su guía, aquí aparece el número.";
   else if (ras === "entregado") nota = suc ? "Ya recogiste tu caja. ¡Que la disfrutes!" : "¡Tu caja ya se entregó!";
   else if (ras === "en_sucursal") nota = "¡Tu caja ya llegó a la sucursal! Ve a recogerla con una identificación.";
@@ -38456,7 +38453,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.53";  // version: "2.9.53"
+var VERSION_BETO = "2.9.54";  // version: "2.9.54"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
