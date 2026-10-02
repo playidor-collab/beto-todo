@@ -35676,7 +35676,7 @@ async function tanqueStripe(env, clave, d) {
     ["metadata[que]", "tanque"], ["metadata[clave]", cual], ["metadata[platicas]", String(t.platicas)],
     ["payment_intent_data[metadata][que]", "tanque"], ["payment_intent_data[metadata][clave]", cual],
     ["payment_intent_data[description]", "Recarga Beto " + cual + " " + t.platicas],
-    ["success_url", base + "/panel?pago=ok#pBeto"], ["cancel_url", base + "/panel?pago=no#pBeto"],
+    ["success_url", base + "/panel?pago=ok&d=casa#pBeto"], ["cancel_url", base + "/panel?pago=no&d=casa#pBeto"],
     ["payment_method_types[0]", "card"], ["payment_method_types[1]", "oxxo"], ["payment_method_types[2]", "customer_balance"],
     ["payment_method_options[oxxo][expires_after_days]", "3"],
     ["payment_method_options[customer_balance][funding_type]", "bank_transfer"],
@@ -36231,9 +36231,9 @@ async function tanqueComprar(env, clave, d) {
     metadata: { clave: cual, platicas: t.platicas },
     notification_url: base + "/mp-aviso",
     back_urls: {
-      success: base + "/panel?pago=ok#pBeto",
-      pending: base + "/panel?pago=pendiente#pBeto",
-      failure: base + "/panel?pago=no#pBeto"
+      success: base + "/panel?pago=ok&d=casa#pBeto",
+      pending: base + "/panel?pago=pendiente&d=casa#pBeto",
+      failure: base + "/panel?pago=no&d=casa#pBeto"
     },
     auto_return: "approved",
     /* Sin binary_mode a proposito: con el, Mercado Pago quita el pago en
@@ -37095,7 +37095,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.41";  // version: "2.9.41"
+var VERSION_BETO = "2.9.42";  // version: "2.9.42"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
