@@ -36005,7 +36005,7 @@ async function kitSuscribirStripe(env, clave, d) {
     ["subscription_data[description]", ("La Carta C1 · $" + SUSCRIPCION.mensual + "/mes · " + reg.negocio).slice(0, 120)],
     ["metadata[que]", "suscripcion"], ["metadata[suscripcion]", reg.id], ["metadata[efectivo]", d && d.efectivo ? "1" : "0"], ["metadata[enganche]", reg.enganche_aparte ? "aparte" : ""],
     ["payment_method_types[0]", "card"],
-    ["success_url", base + "/comprar?pago=suscrito"], ["cancel_url", base + "/comprar?pago=no"]
+    ["success_url", base + "/comprar?pago=suscrito" + envioQs(envio)], ["cancel_url", base + "/comprar?pago=no"]
   ];
   if (!efectivo) {
     p.push(["line_items[1][quantity]", "1"],
@@ -36044,7 +36044,7 @@ async function kitEngancheStripe(env, clave, d) {
     ["line_items[0][price_data][product_data][description]", "Impresora, rollos, códigos QR y 300 pláticas con Beto. Después, $" + SUSCRIPCION.mensual + " al mes con tarjeta. Por ahora no emitimos factura."],
     ["metadata[que]", "enganche"], ["metadata[suscripcion]", reg.id],
     ["payment_intent_data[metadata][que]", "enganche"], ["payment_intent_data[metadata][suscripcion]", reg.id],
-    ["success_url", base + "/comprar?paso=mensual&r=" + reg.id + "&eng=stripe"], ["cancel_url", base + "/comprar?pago=no"],
+    ["success_url", base + "/comprar?paso=mensual&r=" + reg.id + "&eng=stripe" + envioQs(envio)], ["cancel_url", base + "/comprar?pago=no"],
     ["payment_method_types[0]", "card"], ["payment_method_types[1]", "oxxo"], ["payment_method_types[2]", "customer_balance"],
     ["payment_method_options[oxxo][expires_after_days]", "3"],
     ["payment_method_options[customer_balance][funding_type]", "bank_transfer"],
@@ -36190,16 +36190,374 @@ function textoEnvio(r) {
     "\n" + r.calle + ", col. " + r.colonia + "\nCP " + r.cp + ", " + r.ciudad + ", " + r.estado +
     (r.referencias ? "\nReferencias: " + r.referencias : "");
 }
-/* Cuando el pago ya entro: avisa a Edsi UNA vez con la direccion. */
-async function envioPagado(env, id, como, monto, prueba) {
+/* Cuando el pago ya entro: avisa a Edsi UNA vez con la direccion.
+   (2.9.46) La marca de pagado se escribe condicionada (etag): si llegan dos
+   avisos al mismo tiempo, solo uno gana. Con ENVIA_TOKEN, luego hace la guia. */
+async function envioPagado(env, id, como, monto, prueba, ctx) {
   const limpio = String(id || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
-  const reg = limpio ? await stripeLee(env, "envios/" + limpio + ".json") : null;
-  if (!reg || reg.estado_envio === "pagado") return false;
+  const x = limpio ? await enviaLeeConEtag(env, limpio) : null;
+  if (!x) return false;
+  const reg = x.reg;
+  if (reg.pagado || (reg.estado_envio && reg.estado_envio !== "sin_pagar")) return false;
   reg.estado_envio = "pagado"; reg.pagado = isoMX(); reg.como = como;
-  await stripeGuarda(env, "envios/" + limpio + ".json", reg);
-  await avisaEdsiRed(env, "\u{1F4E6} <b>Mándale su caja</b>" + (prueba || "") + " — pagó $" + monto + " por " + como + "\n" + textoEnvio(reg));
+  if (!(await enviaGuardaSi(env, limpio, reg, x.etag))) return false;
+  await avisaEdsiRed(env, "\u{1F4E6} <b>Mándale su caja</b>" + (prueba || "") + " — pagó $" + monto + " por " + como + "\n" + textoEnvio(reg) +
+    "\n\u{1F517} Su página para seguir la caja (mándasela): " + enviaEsc(enviaLigaCliente(limpio)));
+  if (String(env.ENVIA_TOKEN || "").trim()) {
+    const p = enviaGuia(env, limpio, prueba).catch(() => {});
+    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(p); else await p;
+  }
   return true;
 }
+/* ===================== ENVIA CONECTADO (2.9.46) =====================
+   La guia sola en Envia.com, la pagina del cliente y el rastreo. */
+var ENVIA_API = "https://api.envia.com";
+var ENVIA_QUERIES = "https://queries.envia.com";
+/* De donde salen las cajas: los mismos datos que DISTRIB (la poliza). */
+var ENVIA_ORIGEN = { name: "Edsi Fabian Perez Jaramillo", company: "La Carta", phone: "3141332169",
+  street: "Calle Neptuno", number: "229", district: "Valle Esmeralda", city: "Manzanillo", state: "CL",
+  country: "MX", postalCode: "28219", reference: "Barrio 4" };
+/* La caja del kit: 25 x 20 x 10 cm, 1 kg. */
+var ENVIA_CAJA = { type: "box", content: "Impresora termica y papeleria", amount: 1, declaredValue: 0,
+  lengthUnit: "CM", weightUnit: "KG", weight: 1, dimensions: { length: 25, width: 20, height: 10 } };
+var ENVIA_DOMICILIO_PAQ = ["fedex", "paquetexpress"];
+var ENVIA_CACHE_MIN = 20;
+function enviaEsc(t) {
+  return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function enviaLigaCliente(id) { return "https://" + DOMINIO_PUBLICO + "/envio/" + id; }
+function envioQs(envio) { return envio && envio.id ? "&e=" + envio.id : ""; }
+async function enviaLeeConEtag(env, id) {
+  const o = await env.FOTOS.get("envios/" + id + ".json");
+  if (!o) return null;
+  let reg = null;
+  try { reg = JSON.parse(await o.text()); } catch (e) { reg = null; }
+  return reg ? { reg, etag: o.etag } : null;
+}
+/* Escribe SOLO si nadie lo cambio desde que se leyo. false = alguien gano. */
+async function enviaGuardaSi(env, id, reg, etag) {
+  const r = await env.FOTOS.put("envios/" + id + ".json", JSON.stringify(reg),
+    { httpMetadata: { contentType: "application/json" }, onlyIf: { etagMatches: etag } });
+  return !!r;
+}
+/* Los 32 estados como los escribe la gente -> el codigo de 2 letras de Envia. */
+var ENVIA_ESTADOS = {
+  AG: ["aguascalientes", "ags", "agu", "ag"],
+  BC: ["baja california", "baja california norte", "bc", "bcn", "b c"],
+  BS: ["baja california sur", "bcs", "b c s", "bs"],
+  CM: ["campeche", "camp", "cam", "cm"],
+  CS: ["chiapas", "chis", "chs", "cs"],
+  CH: ["chihuahua", "chih", "ch"],
+  CX: ["cdmx", "cd mx", "ciudad de mexico", "ciudad mexico", "cd de mexico", "cd mexico", "mexico df", "mexico d f", "df", "d f", "distrito federal", "cx"],
+  CO: ["coahuila", "coahuila de zaragoza", "coah", "co"],
+  CL: ["colima", "col", "cl"],
+  DG: ["durango", "dgo", "dg"],
+  GT: ["guanajuato", "gto", "gt"],
+  GR: ["guerrero", "gro", "gr"],
+  HG: ["hidalgo", "hgo", "hg"],
+  JA: ["jalisco", "jal", "ja"],
+  EM: ["estado de mexico", "estado mexico", "edo de mexico", "edo mexico", "edo de mex", "edo mex", "edomex", "est de mexico", "mexico", "mex", "em"],
+  MI: ["michoacan", "michoacan de ocampo", "mich", "mi"],
+  MO: ["morelos", "mor", "mo"],
+  NA: ["nayarit", "nay", "na"],
+  NL: ["nuevo leon", "nl", "n l"],
+  OA: ["oaxaca", "oax", "oa"],
+  PU: ["puebla", "pue", "pu"],
+  QT: ["queretaro", "queretaro de arteaga", "qro", "qt"],
+  QR: ["quintana roo", "q roo", "qroo", "qr"],
+  SL: ["san luis potosi", "slp", "s l p", "sl"],
+  SI: ["sinaloa", "sin", "si"],
+  SO: ["sonora", "son", "so"],
+  TB: ["tabasco", "tab", "tb"],
+  TM: ["tamaulipas", "tamps", "tamp", "tm"],
+  TL: ["tlaxcala", "tlax", "tl"],
+  VE: ["veracruz", "veracruz de ignacio de la llave", "ver", "ve"],
+  YU: ["yucatan", "yuc", "yu"],
+  ZA: ["zacatecas", "zac", "za"]
+};
+function enviaEstado(texto) {
+  const n = String(texto || "").normalize("NFD").replace(/[^ -~]/g, "").toLowerCase()
+    .replace(/[^a-z]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!n) return "";
+  const busca = (t) => { for (const k in ENVIA_ESTADOS) if (ENVIA_ESTADOS[k].indexOf(t) > -1) return k; return ""; };
+  return busca(n) || busca(n.replace(/^(estado|edo|est) (de )?/, "")) || "";
+}
+/* "Av. Juarez 123 int 4" -> calle "Av. Juarez", numero "123 int 4". Sin numero: "SN". */
+function enviaCalle(texto) {
+  const t = String(texto || "").replace(/\s+/g, " ").trim();
+  if (/\bs\s*\/?\s*n\.?$/i.test(t)) return { street: t.replace(/[\s,#]*\bs\s*\/?\s*n\.?$/i, "").trim() || t, number: "SN" };
+  const m = t.match(/^(.*?\S)[\s,]*(?:#|n[uú]m(?:ero)?\.?|no\.)?\s*(\d+[A-Za-z]?(?:\s*-\s*[0-9A-Za-z]{1,4})?(?:\s*(?:int|interior|depto|dpto|local|lote)\.?\s*[A-Za-z0-9-]+)?)$/i);
+  if (m && m[1].replace(/[\s,#.]+$/, "").length >= 2) return { street: m[1].replace(/[\s,#]+$/, ""), number: m[2].replace(/\s+/g, " ") };
+  return { street: t, number: "SN" };
+}
+function enviaDireccion(reg, edo) {
+  const c = enviaCalle(reg.calle);
+  return { name: reg.recibe, phone: reg.telefono, street: c.street, number: c.number, district: reg.colonia,
+    city: reg.ciudad, state: edo, country: "MX", postalCode: reg.cp, reference: String(reg.referencias || "") };
+}
+/* Una llamada a Envia. Cualquier error sale como Error con motivo corto. */
+async function enviaPide(env, base, camino, cuerpo) {
+  const op = { method: cuerpo ? "POST" : "GET",
+    headers: { "authorization": "Bearer " + String(env.ENVIA_TOKEN || "").trim(), "content-type": "application/json", "accept": "application/json" } };
+  if (cuerpo) op.body = JSON.stringify(cuerpo);
+  if (typeof AbortSignal !== "undefined" && AbortSignal.timeout) op.signal = AbortSignal.timeout(25000);
+  const r = await fetch(base + camino, op);
+  const texto = await r.text();
+  let j = null;
+  try { j = JSON.parse(texto); } catch (e) { j = null; }
+  if (!r.ok || (j && j.meta === "error")) {
+    const e = (j && (j.error || j)) || {};
+    const msg = String((typeof e === "string" ? e : e.message || e.description) || (j && j.message) || "").slice(0, 160);
+    throw new Error(msg ? msg : "Envia contestó " + r.status);
+  }
+  return j;
+}
+function enviaMotivo(e) {
+  const m = String(e && e.message || e || "").replace(/\s+/g, " ").trim();
+  if (/saldo|balance|fondos|insufficient|credit/i.test(m)) return "sin saldo en Envia";
+  return (m || "error de Envia").slice(0, 90);
+}
+function enviaLista(j) { return Array.isArray(j) ? j : (j && Array.isArray(j.data) ? j.data : []); }
+async function enviaTarifas(env, carrier, origen, destino) {
+  const j = await enviaPide(env, ENVIA_API, "/ship/rate/", { origin: origen, destination: destino, packages: [ENVIA_CAJA],
+    shipment: { type: 1, carrier }, settings: { currency: "MXN" } });
+  return enviaLista(j).filter((t) => t && t.service && Number(t.totalPrice) > 0)
+    .map((t) => Object.assign({}, t, { carrier: String(t.carrier || carrier), dropOff: Number(t.dropOff || 0), totalPrice: Number(t.totalPrice) }));
+}
+function enviaMasBarata(lista) { return lista.slice().sort((a, b) => a.totalPrice - b.totalPrice)[0] || null; }
+/* El nombre que Envia le da a PuntoPost; si no lo encuentra, "puntopost". */
+async function enviaSlugPuntoPost(env) {
+  try {
+    const l = enviaLista(await enviaPide(env, ENVIA_QUERIES, "/carrier?country_code=MX"));
+    const x = l.find((c) => c && /punto\s*post/i.test(String(c.name || "") + " " + String(c.description || "")));
+    if (x && x.name) return String(x.name);
+  } catch (e) {}
+  return "puntopost";
+}
+/* La sucursal mas cercana a un CP (tipo 1 = donde se deja, 2 = donde se recoge).
+   Envia, si no encuentra nada cerca, regresa sucursales de cualquier lado:
+   solo sirve si trae distancia de 50 km o menos, o si comparte los 3 primeros
+   numeros del CP. null = no hay cerca. */
+async function enviaSucursal(env, carrier, cp, tipo) {
+  const l = enviaLista(await enviaPide(env, ENVIA_QUERIES, "/branches/" + encodeURIComponent(carrier) + "/MX?zipcode=" + encodeURIComponent(cp) + "&type=" + tipo + "&limitBranches=5"));
+  for (const b of l) {
+    if (!b || !b.branch_code) continue;
+    const a = b.address || {};
+    const zip = String(a.postalCode || a.zipcode || "");
+    const d = b.distance == null || b.distance === "" ? NaN : Number(b.distance);
+    if ((isFinite(d) && d <= 50) || (!isFinite(d) && zip.slice(0, 3) === String(cp).slice(0, 3))) return b;
+  }
+  return null;
+}
+function enviaSucursalDatos(b) {
+  const a = b.address || {};
+  const dir = String(a.address || [[a.street, a.number].filter(Boolean).join(" "), a.city || a.locality, a.postalCode].filter(Boolean).join(", "));
+  return { codigo: String(b.branch_code), nombre: String(b.reference || "PuntoPost").slice(0, 80), direccion: dir.slice(0, 160),
+    ciudad: String(a.city || a.locality || "").slice(0, 60) };
+}
+/* LA GUIA. Idempotente: el campo "guia" se marca "en_proceso" con escritura
+   condicionada ANTES de llamar a Envia; si ya tiene algo, no hace nada. */
+async function enviaGuia(env, id, prueba) {
+  if (!String(env.ENVIA_TOKEN || "").trim()) return { ok: false, motivo: "sin_llave" };
+  const x = await enviaLeeConEtag(env, id);
+  if (!x) return { ok: false, motivo: "no_existe" };
+  const reg = x.reg;
+  if (reg.guia || (reg.modo !== "domicilio" && reg.modo !== "sucursal")) return { ok: false, motivo: "ya" };
+  reg.guia = "en_proceso"; reg.guia_inicio = isoMX();
+  if (!(await enviaGuardaSi(env, id, reg, x.etag))) return { ok: false, motivo: "otro_aviso" };
+  const pr = prueba || "";
+  const liga = enviaLigaCliente(id);
+  const queda = async (estado, extra) => {
+    Object.assign(reg, extra || {});
+    reg.guia = estado; reg.estado_envio = estado === "lista" ? "guia_lista" : estado;
+    await stripeGuarda(env, "envios/" + id + ".json", reg);
+  };
+  try {
+    const edo = enviaEstado(reg.estado);
+    if (!edo) {
+      await queda("guia_fallo", { guia_motivo: "no reconozco el estado" });
+      await avisaEdsiRed(env, "⚠️ No pude hacer la guía (no reconozco el estado \"" + enviaEsc(reg.estado) + "\"), hazla a mano en Envia.com" + pr +
+        "\nPara: " + enviaEsc(reg.recibe) + " · CP " + reg.cp + ", " + enviaEsc(reg.ciudad) + "\nSu página: " + enviaEsc(liga));
+      return { ok: false, motivo: "estado" };
+    }
+    const origen = Object.assign({}, ENVIA_ORIGEN);
+    const destino = enviaDireccion(reg, edo);
+    let tarifa = null, suc = null;
+    if (reg.modo === "sucursal") {
+      const slug = await enviaSlugPuntoPost(env);
+      suc = await enviaSucursal(env, slug, reg.cp, 2);
+      if (!suc) {
+        await queda("sin_sucursal", { guia_motivo: "no hay PuntoPost cerca" });
+        await avisaEdsiRed(env, "⚠️ <b>No hay PuntoPost cerca del CP " + reg.cp + "</b>" + pr + ", llámale a " + reg.telefono + " antes de mandarla." +
+          "\n" + enviaEsc(reg.recibe) + " · " + enviaEsc(reg.ciudad) + ", " + enviaEsc(reg.estado) + "\nNo hice guía. Su página: " + enviaEsc(liga));
+        return { ok: false, motivo: "sin_sucursal" };
+      }
+      destino.branchCode = String(suc.branch_code);
+      tarifa = enviaMasBarata((await enviaTarifas(env, slug, origen, destino)).filter((t) => t.dropOff === 1 || t.dropOff === 3));
+      if (!tarifa) throw new Error("PuntoPost no dio precio a ese CP");
+    } else {
+      const res = await Promise.allSettled(ENVIA_DOMICILIO_PAQ.map((c) => enviaTarifas(env, c, origen, destino)));
+      const todas = [];
+      for (const r of res) if (r.status === "fulfilled") todas.push.apply(todas, r.value);
+      tarifa = enviaMasBarata(todas.filter((t) => t.dropOff === 0 || t.dropOff === 2));
+      if (!tarifa) {
+        const f = res.find((r) => r.status === "rejected");
+        throw f ? f.reason : new Error("ninguna paquetería dio precio a domicilio");
+      }
+    }
+    /* Si el servicio pide dejarla en sucursal, la de Manzanillo. */
+    if (tarifa.dropOff === 2 || tarifa.dropOff === 3) {
+      const so = await enviaSucursal(env, tarifa.carrier, origen.postalCode, 1);
+      if (!so) throw new Error("no hay sucursal de " + tarifa.carrier + " cerca de Manzanillo para dejarla");
+      origen.branchCode = String(so.branch_code);
+    }
+    const gen = await enviaPide(env, ENVIA_API, "/ship/generate/", { origin: origen, destination: destino, packages: [ENVIA_CAJA],
+      shipment: { type: 1, carrier: tarifa.carrier, service: tarifa.service },
+      settings: { currency: "MXN", printFormat: "PDF", printSize: "STOCK_4X6" } });
+    const g = enviaLista(gen)[0];
+    if (!g || !g.trackingNumber) throw new Error("Envia no regresó el número de guía");
+    const paqueteria = String(tarifa.carrierDescription || g.carrier || tarifa.carrier);
+    const costo = Number(g.totalPrice != null ? g.totalPrice : tarifa.totalPrice) || 0;
+    await queda("lista", {
+      carrier: String(g.carrier || tarifa.carrier), paqueteria, service: String(g.service || tarifa.service),
+      servicio: String(tarifa.serviceDescription || tarifa.service), trackingNumber: String(g.trackingNumber),
+      trackUrl: String(g.trackUrl || ""), label: String(g.label || ""), totalPrice: costo, fecha_guia: isoMX(),
+      entrega: String(tarifa.deliveryEstimate || ""), saldo_envia: g.currentBalance != null ? Number(g.currentBalance) : null,
+      sucursal: suc ? enviaSucursalDatos(suc) : null, guia_motivo: ""
+    });
+    try { await stripeGuarda(env, "envios/guias/" + String(g.trackingNumber).replace(/[^A-Za-z0-9]/g, "").slice(0, 40) + ".json", { id }); } catch (e) {}
+    await avisaEdsiRed(env, "\u{1F3F7}️ <b>Guía lista</b>" + pr + ": " + enviaEsc(paqueteria) + " " + enviaEsc(g.trackingNumber) + ", $" + costo.toFixed(2) +
+      "\n\u{1F5A8}️ Imprímela y pégala en la caja: " + enviaEsc(g.label || "(Envia no mandó el PDF, bájala de Envia.com)") +
+      (reg.sucursal ? "\n\u{1F3EA} Va a PuntoPost: " + enviaEsc(reg.sucursal.nombre) + " · " + enviaEsc(reg.sucursal.direccion) : "") +
+      "\n\u{1F69A} Seguimiento de la paquetería: " + enviaEsc(g.trackUrl || "(sin liga)") +
+      "\n\u{1F517} Su página para seguir la caja (mándasela): " + enviaEsc(liga) +
+      (g.currentBalance != null && Number(g.currentBalance) < 300 ? "\n⚠️ Te quedan $" + Number(g.currentBalance).toFixed(2) + " de saldo en Envia." : ""));
+    return { ok: true, trackingNumber: String(g.trackingNumber) };
+  } catch (e) {
+    const motivo = enviaMotivo(e);
+    try { await queda("guia_fallo", { guia_motivo: motivo }); } catch (e2) {}
+    try {
+      await avisaEdsiRed(env, "⚠️ No pude hacer la guía (" + enviaEsc(motivo) + "), hazla a mano en Envia.com" + pr +
+        "\nPara: " + enviaEsc(reg.recibe) + " · CP " + reg.cp + ", " + enviaEsc(reg.ciudad) + "\nSu página: " + enviaEsc(liga));
+    } catch (e3) {}
+    return { ok: false, motivo };
+  }
+}
+/* EL RASTREO. Se le pregunta a Envia y se guarda ENVIA_CACHE_MIN minutos. */
+function enviaPasoDe(d) {
+  const id = Number(d && (d.statusId != null ? d.statusId : d.status_id));
+  const t = String(d && (d.status || d.statusName || d.shipmentStatus) || "").toLowerCase();
+  if (id === 3 || /^delivered$|entregad/.test(t)) return "entregado";
+  if (id === 12 || /pickup at office|office|sucursal|ocurre|recoger/.test(t)) return "en_sucursal";
+  if ([4, 10, 11, 13, 14, 20, 21, 22, 24].indexOf(id) > -1 || /cancel|lost|return|damag|undeliver|reject|address error|at origin|devuel|perdid|rechaz/.test(t)) return "problema";
+  if ([2, 8, 9, 15, 17, 18, 19, 23, 25, 26, 27, 28].indexOf(id) > -1 || /ship|transit|picked|out for|attempt|delay|redirect|camino|transito|recolect/.test(t)) return "en_camino";
+  return "guia";
+}
+function enviaUltimoMov(d) {
+  const ev = (d && (d.eventHistory || d.events || d.history)) || [];
+  const u = Array.isArray(ev) && ev.length ? ev[ev.length - 1] : null;
+  if (!u || typeof u !== "object") return "";
+  return [u.event || u.description || u.status, u.location, u.date].filter((v) => typeof v === "string" && v).join(" · ").slice(0, 140);
+}
+async function enviaRastreo(env, id, reg, forzar) {
+  if (!reg || !reg.trackingNumber || !String(env.ENVIA_TOKEN || "").trim()) return reg;
+  const r0 = reg.rastreo || {};
+  if (r0.paso === "entregado") return reg;
+  const espera = forzar ? 60e3 : ENVIA_CACHE_MIN * 60e3;
+  if (r0.consultado && Date.now() - r0.consultado < espera) return reg;
+  try {
+    const l = enviaLista(await enviaPide(env, ENVIA_API, "/ship/generaltrack/", { trackingNumbers: [reg.trackingNumber] }));
+    const d = l.find((v) => v && String(v.trackingNumber || v.tracking_number || "") === reg.trackingNumber) || l[0] || {};
+    reg.rastreo = { consultado: Date.now(), paso: enviaPasoDe(d), ultimo: enviaUltimoMov(d), fecha: isoMX() };
+  } catch (e) {
+    /* si Envia falla, se vuelve a intentar en 5 minutos */
+    reg.rastreo = Object.assign({}, r0, { consultado: Date.now() - (ENVIA_CACHE_MIN - 5) * 60e3 });
+  }
+  try { await stripeGuarda(env, "envios/" + id + ".json", reg); } catch (e) {}
+  return reg;
+}
+/* El webhook de Envia: solo DESPIERTA. No se le cree nada al cuerpo; con el
+   numero de guia se busca el envio y se vuelve a preguntar a la API. */
+async function enviaAviso(env, request) {
+  let b = {};
+  try { b = JSON.parse((await request.text()).slice(0, 65536)); } catch (e) { b = {}; }
+  const d = (b && b.data) || {};
+  const guia = String(d.tracking_number || d.trackingNumber || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 40);
+  if (!guia) return { ok: true, motivo: "sin_guia" };
+  const idx = await stripeLee(env, "envios/guias/" + guia + ".json");
+  if (!idx || !idx.id) return { ok: true, motivo: "no_es_nuestra" };
+  const reg = await stripeLee(env, "envios/" + idx.id + ".json");
+  if (!reg || reg.trackingNumber !== guia) return { ok: true, motivo: "no_es_nuestra" };
+  await enviaRastreo(env, idx.id, reg, true);
+  return { ok: true };
+}
+/* LA PAGINA DEL CLIENTE: /envio/<id>. Solo ciudad: nunca calle, telefono ni nombre. */
+async function enviaPagina(env, id) {
+  const limpio = String(id || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  let reg = limpio ? await stripeLee(env, "envios/" + limpio + ".json") : null;
+  const cab = { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" };
+  if (!reg) return new Response(enviaHtml("No encontramos ese envío", "<p class=\"nota\">Revisa que la liga esté completa. Si la copiaste de un mensaje, cópiala otra vez.</p>"), { status: 404, headers: cab });
+  reg = await enviaRastreo(env, limpio, reg, false);
+  const suc = reg.modo === "sucursal";
+  const ras = (reg.rastreo && reg.rastreo.paso) || "";
+  const guiaLista = reg.guia === "lista" && reg.trackingNumber;
+  let n = 0;
+  if (reg.pagado) n = 1;
+  if (guiaLista) n = 2;
+  if (guiaLista && (ras === "en_camino" || ras === "problema")) n = 3;
+  if (guiaLista && (ras === "entregado" || ras === "en_sucursal")) n = 4;
+  const pasos = ["Pagado", "Guía lista", "En camino", suc ? "Lista para recoger en PuntoPost" : "Entregado"];
+  let h = "<ol class=\"pasos\">";
+  pasos.forEach((p, i) => {
+    const c = i < n ? "si" : i === n ? "ahora" : "";
+    h += "<li class=\"" + c + "\"><span class=\"bola\">" + (i < n ? "&#10003;" : String(i + 1)) + "</span><span class=\"txt\">" + enviaEsc(p) + "</span></li>";
+  });
+  h += "</ol>";
+  let nota = "";
+  if (!reg.pagado) nota = "Todavía no nos llega tu pago. Si pagaste en OXXO o por transferencia, puede tardar unas horas.";
+  else if (!guiaLista) nota = reg.guia === "sin_sucursal" || reg.guia === "guia_fallo" ? "Ya estamos preparando tu caja. Te vamos a llamar para confirmar el envío."
+    : "Ya estamos preparando tu caja. En cuanto tenga su guía, aquí aparece el número.";
+  else if (ras === "entregado") nota = suc ? "Ya recogiste tu caja. ¡Que la disfrutes!" : "¡Tu caja ya se entregó!";
+  else if (ras === "en_sucursal") nota = "¡Tu caja ya llegó a la sucursal! Ve a recogerla con una identificación.";
+  else if (ras === "problema") nota = "La paquetería reporta un detalle con tu caja. Te vamos a llamar.";
+  else if (ras === "en_camino") nota = "Tu caja va en camino.";
+  else nota = "Tu caja ya tiene guía. Sale de Manzanillo en los próximos días.";
+  h += "<p class=\"nota\">" + enviaEsc(nota) + "</p>";
+  if (guiaLista) {
+    h += "<div class=\"caja\"><b>TU GUÍA</b><p>" + enviaEsc(reg.paqueteria || reg.carrier) + "</p><p class=\"num\">" + enviaEsc(reg.trackingNumber) + "</p>" +
+      (reg.rastreo && reg.rastreo.ultimo ? "<p class=\"chico\">Último movimiento: " + enviaEsc(reg.rastreo.ultimo) + "</p>" : "") +
+      (/^https:\/\//.test(String(reg.trackUrl || "")) ? "<a class=\"btn\" href=\"" + enviaEsc(reg.trackUrl) + "\" rel=\"noopener\">Ver en la página de la paquetería</a>" : "") + "</div>";
+  }
+  if (suc && reg.sucursal) {
+    h += "<div class=\"caja\"><b>DÓNDE LA RECOGES</b><p>" + enviaEsc(reg.sucursal.nombre) + "</p><p class=\"chico\">" + enviaEsc(reg.sucursal.direccion) + "</p></div>";
+  }
+  h += "<div class=\"caja\"><b>VA PARA</b><p>" + enviaEsc(reg.ciudad) + ", " + enviaEsc(reg.estado) + "</p><p class=\"chico\">" +
+    (suc ? "Gratis a una sucursal PuntoPost" : "A domicilio") + "</p></div>";
+  return new Response(enviaHtml("Tu caja", h), { status: 200, headers: cab });
+}
+function enviaHtml(titulo, cuerpo) {
+  return "<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+    "<meta name=\"robots\" content=\"noindex\"><title>" + enviaEsc(titulo) + " &middot; La Carta</title><style>" +
+    "*{box-sizing:border-box}html,body{margin:0;background:#0e1113;color:#f2f4f6;font-family:-apple-system,system-ui,'Segoe UI',Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}" +
+    ".tapa{max-width:460px;margin:0 auto;padding:26px 18px 50px}.marca{font-size:19px;font-weight:900;letter-spacing:2.6px}" +
+    ".marca small{display:block;font-size:10.5px;font-weight:800;letter-spacing:2px;color:#8b959e;margin-top:2px}" +
+    "h1{font-size:26px;line-height:1.18;margin:24px 0 18px;font-weight:900}" +
+    ".pasos{list-style:none;margin:0 0 6px;padding:0}.pasos li{position:relative;display:flex;align-items:center;gap:13px;padding:0 0 22px;color:#78838f;font-size:15.5px;font-weight:700}" +
+    ".pasos li:not(:last-child)::after{content:'';position:absolute;left:15px;top:32px;bottom:2px;width:2px;background:#2f3a41}" +
+    ".pasos li.si::after{background:#8fd6ac}.bola{flex:0 0 32px;height:32px;border-radius:50%;border:2px solid #2f3a41;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;background:#0e1113}" +
+    ".pasos li.si{color:#c2cad1}.pasos li.si .bola{background:#8fd6ac;border-color:#8fd6ac;color:#0e1113}" +
+    ".pasos li.ahora{color:#f2f4f6}.pasos li.ahora .bola{border-color:#8fd6ac;color:#8fd6ac}" +
+    ".nota{font-size:15.5px;line-height:1.55;color:#c2cad1;margin:0 0 20px}" +
+    ".caja{background:#1b2126;border:1px solid #2b333a;border-radius:14px;padding:15px 16px;margin-bottom:14px}" +
+    ".caja b{display:block;font-size:11px;font-weight:800;letter-spacing:1.6px;color:#8b959e;margin-bottom:8px}" +
+    ".caja p{margin:0 0 6px;font-size:15px;line-height:1.5;color:#f2f4f6}.caja p:last-child{margin-bottom:0}" +
+    ".caja .num{font-size:21px;font-weight:900;letter-spacing:1px;word-break:break-all}.caja .chico{font-size:13.5px;color:#98a2ab}" +
+    ".btn{display:block;margin-top:12px;padding:14px;border-radius:12px;background:#8fd6ac;color:#0e1113;text-align:center;font-weight:900;text-decoration:none;font-size:15px}" +
+    ".pie{margin-top:26px;padding-top:15px;border-top:1px solid #232a30;font-size:12.5px;line-height:1.55;color:#78838f}" +
+    "</style></head><body><div class=\"tapa\"><div class=\"marca\">LA CARTA<small>COMANDERO C1</small></div><h1>" + enviaEsc(titulo) + "</h1>" + cuerpo +
+    "<div class=\"pie\">Guarda esta liga: aquí ves por dónde va tu caja. La página se actualiza cada 20 minutos.</div></div></body></html>";
+}
+/* ===================== /ENVIA CONECTADO ===================== */
 async function kitContado(env, clave, d) {
   if (!hayStripe(env)) throw new Error("todavía no se puede pagar así; paga en efectivo con quien te atendió");
   const base = origenPublico("", String(d && d.__origen || ""));
@@ -36223,7 +36581,7 @@ async function kitContado(env, clave, d) {
     ["customer_update[name]", "auto"],
     ["custom_fields[0][key]", "negocio"], ["custom_fields[0][type]", "text"],
     ["custom_fields[0][label][type]", "custom"], ["custom_fields[0][label][custom]", "Nombre de tu negocio"],
-    ["success_url", base + "/comprar?pago=stripe"], ["cancel_url", base + "/comprar?pago=no"],
+    ["success_url", base + "/comprar?pago=stripe" + envioQs(envio)], ["cancel_url", base + "/comprar?pago=no"],
     ["payment_method_types[0]", "card"], ["payment_method_types[1]", "oxxo"], ["payment_method_types[2]", "customer_balance"],
     ["payment_method_options[oxxo][expires_after_days]", "3"],
     ["payment_method_options[customer_balance][funding_type]", "bank_transfer"],
@@ -36238,7 +36596,7 @@ async function kitContado(env, clave, d) {
 }
 /* EL AVISO DE STRIPE. Contesta 200 si ya quedo (o si no nos importa), 400 si
    la firma no cuadra, 500 si algo fallo adentro (Stripe reintenta). */
-async function stripeAviso(env, request) {
+async function stripeAviso(env, request, ctx) {
   if (!hayStripe(env)) return { status: 503, cuerpo: { ok: false, motivo: "stripe no configurado" } };
   const crudo = await request.text();
   if (crudo.length > 262144) return { status: 413, cuerpo: { ok: false } };
@@ -36251,18 +36609,18 @@ async function stripeAviso(env, request) {
   if ((ev.livemode === true) !== stripeEnVivo(env)) return { status: 200, cuerpo: { ok: true, ignorado: "otro modo" } };
   if (await env.FOTOS.head("stripe/eventos/" + evId + ".json")) return { status: 200, cuerpo: { ok: true, repetido: true } };
   let salida;
-  try { salida = await stripeProcesa(env, ev); }
+  try { salida = await stripeProcesa(env, ev, ctx); }
   catch (e) { return { status: 500, cuerpo: { ok: false, motivo: String(e && e.message || e).slice(0, 120) } }; }
   await stripeGuarda(env, "stripe/eventos/" + evId + ".json", { tipo: String(ev.type || ""), fecha: isoMX(), salida });
   return { status: 200, cuerpo: Object.assign({ ok: true }, salida) };
 }
-async function stripeProcesa(env, ev) {
+async function stripeProcesa(env, ev, ctx) {
   const tipo = String(ev.type || "");
   const o = (ev.data && ev.data.object) || {};
   const md = o.metadata || {};
   const prueba = ev.livemode === true ? "" : " <i>(prueba)</i>";
   if (md.envio && ((tipo === "checkout.session.completed" && o.payment_status === "paid") || tipo === "checkout.session.async_payment_succeeded")) {
-    try { await envioPagado(env, md.envio, "Stripe", Number(o.amount_total) / 100, prueba); } catch (e) {}
+    try { await envioPagado(env, md.envio, "Stripe", Number(o.amount_total) / 100, prueba, ctx); } catch (e) {}
   }
   if ((tipo === "checkout.session.completed" && md.que === "suscripcion") || tipo === "invoice.paid" || tipo === "invoice.payment_failed" ||
       tipo === "customer.subscription.updated" || tipo === "customer.subscription.deleted") {
@@ -36353,7 +36711,7 @@ async function kitEnganche(env, clave, d) {
       /* "kite" no es ningun negocio ni tanque: el aviso de recargas lo descarta. */
       external_reference: "kite|" + reg.id,
       payer: { email: reg.correo },
-      back_urls: { success: base + "/comprar?paso=mensual&r=" + reg.id, pending: base + "/comprar?paso=mensual&r=" + reg.id + "&eng=pendiente", failure: base + "/comprar?pago=no" },
+      back_urls: { success: base + "/comprar?paso=mensual&r=" + reg.id + envioQs(envio), pending: base + "/comprar?paso=mensual&r=" + reg.id + "&eng=pendiente" + envioQs(envio), failure: base + "/comprar?pago=no" },
       auto_return: "approved",
       statement_descriptor: "LA CARTA"
     })
@@ -36375,7 +36733,7 @@ async function kitMensual(env, clave, d) {
       reason: ("La Carta C1 · $" + SUSCRIPCION.mensual + "/mes · " + reg.negocio).slice(0, 60),
       external_reference: "kits|" + reg.id,
       payer_email: reg.correo,
-      back_url: base + "/comprar?pago=suscrito",
+      back_url: base + "/comprar?pago=suscrito" + (reg.envio ? "&e=" + String(reg.envio).replace(/[^a-z0-9]/g, "").slice(0, 20) : ""),
       auto_recurring: { frequency: 1, frequency_type: "months", start_date: inicio, transaction_amount: SUSCRIPCION.mensual, currency_id: "MXN" },
       status: "pending"
     })
@@ -37094,8 +37452,8 @@ async function kitComprar(env, clave, d) {
     external_reference: "kitc|" + p.meses,
     metadata: { kit: "c1", meses: p.meses },
     back_urls: {
-      success: base + "/comprar?pago=ok",
-      pending: base + "/comprar?pago=pendiente",
+      success: base + "/comprar?pago=ok" + envioQs(envio),
+      pending: base + "/comprar?pago=pendiente" + envioQs(envio),
       failure: base + "/comprar?pago=no"
     },
     auto_return: "approved",
@@ -37199,14 +37557,14 @@ __name(tanqueComprar, "tanqueComprar");
    o, en el formato viejo, como ?topic=payment&id=... Se contesta 200 rapido
    en todos los casos: si se contesta otra cosa, Mercado Pago reintenta y
    reintenta. Lo que importa pasa adentro. */
-async function mpAviso(env, request, q) {
+async function mpAviso(env, request, q, ctx) {
   if (!hayMercadoPago(env)) return { ok: false, motivo: "sin_llave" };
   let b = {};
   try { b = await leerCuerpo(request); } catch (e) { b = {}; }
   const tipo = String((b && b.type) || q.get("type") || q.get("topic") || "");
   const id = String((b && b.data && b.data.id) || q.get("data.id") || q.get("id") || "").replace(/[^0-9]/g, "");
   if (tipo !== "payment" || !id) return { ok: true, motivo: "no_es_pago" };
-  return await mpCobrar(env, id);
+  return await mpCobrar(env, id, ctx);
 }
 __name(mpAviso, "mpAviso");
 
@@ -37214,7 +37572,7 @@ __name(mpAviso, "mpAviso");
    "approved" se carga. Y se carga UNA vez: el pago se apunta en la tabla de
    recargas como un codigo ya usado, MP-<id>. Si el aviso llega dos veces (y
    llega), la segunda encuentra el renglon y no hace nada. */
-async function mpCobrar(env, pagoId) {
+async function mpCobrar(env, pagoId, ctx) {
   const r = await fetch(MP_API + "/v1/payments/" + pagoId, {
     headers: { "authorization": "Bearer " + String(env.MP_TOKEN).trim() }
   });
@@ -37227,7 +37585,7 @@ async function mpCobrar(env, pagoId) {
   const ref = String(pago.external_reference || "");
   if (/^kit[ce][|]/.test(ref)) {
     const eid = pago.metadata && pago.metadata.envio;
-    if (eid) { try { await envioPagado(env, eid, "Mercado Pago", Number(pago.transaction_amount || 0), ""); } catch (e) {} }
+    if (eid) { try { await envioPagado(env, eid, "Mercado Pago", Number(pago.transaction_amount || 0), "", ctx); } catch (e) {} }
     return { ok: true, motivo: "kit" };
   }
   const partes = ref.split("|");
@@ -38039,7 +38397,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.45.1";  // version: "2.9.45.1"
+var VERSION_BETO = "2.9.46";  // version: "2.9.46"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -39308,6 +39666,8 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 </style></head><body><div class="tapa">
 <div class="marca">LA CARTA<small>COMANDERO C1</small></div>
 
+<a id="sigue" href="/envio" style="display:none;margin:20px 0 0;padding:15px 16px;border-radius:14px;background:#14301f;border:1.5px solid #8fd6ac;color:#a8e8c4;text-decoration:none;font-size:15px;line-height:1.45"><b style="display:block;font-size:17px;color:#f2f4f6;margin-bottom:3px">&#128230; Sigue tu caja aqu&iacute;</b>Ah&iacute; ves cu&aacute;ndo sale, tu n&uacute;mero de gu&iacute;a y por d&oacute;nde va. Guarda la liga.</a>
+
 <h1>P&aacute;galo con tu tarjeta,<br>a meses sin intereses.</h1>
 <p class="baja">De contado son <b>$3,700</b> en efectivo, con quien te lo ense&ntilde;&oacute;. Con tarjeta de cr&eacute;dito:</p>
 <p class="ay" style="margin:-8px 0 16px">Por ahora no emitimos factura.</p>
@@ -39403,6 +39763,12 @@ function envioListo(){
     ENV.id = r.id; ENV.firma = f; return r.id;
   });
 }
+(function(){
+  var eid = (qs.get('e') || '').replace(/[^a-z0-9]/g, '').slice(0, 20);
+  if (!eid) return;
+  var sg = document.getElementById('sigue');
+  sg.href = '/envio/' + eid; sg.style.display = 'block';
+})();
 if (pago === 'suscrito') avisa('<b>Listo, quedaste suscrito.</b> Cada mes se cobran $400 a tu tarjeta. Qui&eacute;n te atendi&oacute; ya lo ve.', true);
 else if (pago === 'ok') avisa('<b>Listo, tu pago entr&oacute;.</b> Qui&eacute;n te atendi&oacute; ya lo ve. Guarda el correo de Mercado Pago.', true);
 else if (pago === 'pendiente') avisa('Tu pago qued&oacute; en proceso. En cuanto lo aprueben, listo.', true);
@@ -41352,7 +41718,7 @@ var worker_beto_todo_default = {
     ctx.waitUntil(revisarSuscripciones(env, false).catch(() => {}));
     ctx.waitUntil(cobroRenuevaTodos(env).catch(() => {}));
   },
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const ruta = url.pathname.replace(/\/+$/, "") || "/";
     const q = url.searchParams;
@@ -41670,6 +42036,15 @@ await chatAvisar(env, cfg,
     }
     if (ruta === "/privacidad" || ruta === "/aviso-de-privacidad") {
       return new Response(HTML_PRIVACIDAD, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" } });
+    }
+    if (ruta === "/envio" || ruta.indexOf("/envio/") === 0) {
+      try { return await enviaPagina(env, ruta === "/envio" ? q.get("id") : ruta.slice(7)); }
+      catch (e) { return new Response("No se pudo abrir tu envío. Intenta en un rato.", { status: 500, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } }); }
+    }
+    if (ruta === "/envia-aviso" && request.method === "POST") {
+      let r;
+      try { r = await enviaAviso(env, request); } catch (e) { r = { ok: true, motivo: "error" }; }
+      return json(r, 200);
     }
     if (ruta === "/comprar" || ruta === "/comprarla") {
       return new Response(HTML_COMPRA.replace("<!--STRIPE_CONTADO-->", hayStripe(env) && (stripeEnVivo(env) || q.get("prueba") === "stripe") ? STRIPE_CONTADO_HTML : ""), {
@@ -42596,6 +42971,7 @@ await chatAvisar(env, cfg,
               solo: t("COBRO_SOLO") || "(todos)"
             };
           })(),
+          envia: { llave: String(env.ENVIA_TOKEN || "").trim() ? "bien" : "falta" },
           hora_mexico: fechaHoraMX(),
           rutas: [
             "/mesa",
@@ -43253,13 +43629,13 @@ await chatAvisar(env, cfg,
       catch (e) { return json({ ok: false, error: "no se pudo revisar" }, 502); }
     }
     if (ruta === "/stripe-aviso" && request.method === "POST") {
-      const r = await stripeAviso(env, request);
+      const r = await stripeAviso(env, request, ctx);
       return json(r.cuerpo, r.status);
     }
     /* Mercado Pago avisa aqui cuando alguien paga un tanque. */
     if (ruta === "/mp-aviso") {
       let salida;
-      try { salida = await mpAviso(env, request, q); }
+      try { salida = await mpAviso(env, request, q, ctx); }
       catch (e) { salida = { ok: false, motivo: String(e && e.message || e) }; }
       return json(salida, 200);
     }
