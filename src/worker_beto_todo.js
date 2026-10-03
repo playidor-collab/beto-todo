@@ -2053,6 +2053,82 @@ document.addEventListener("visibilitychange", function(){
 
 cargar();
 timer = setInterval(cargar, 8000);
+/* LA COCINA EN VIVO (2.9.63-vivo). Un hilo abierto con el servidor: cuando
+   entra o cambia un pedido, llega un aviso corto y la pantalla se refresca al
+   momento. Si el hilo no abre o se cae, todo sigue como antes: el sondeo. */
+function vivoArranca(o){
+  var yo = { conectado: false };
+  if (!window.WebSocket || !window.fetch || !/^https?:$/.test(location.protocol)) return yo;
+  var ws = null, espera = 3000, reloj = null, latido = null, ultimo = 0, junta = null;
+  function cambia(v){ if (yo.conectado === v) return; yo.conectado = v; try { o.alCambio(v); } catch (e) {} }
+  function luego(ms){ if (reloj) clearTimeout(reloj); reloj = setTimeout(abre, ms); }
+  function sube(){ var e = espera; espera = Math.min(espera * 2, 60000); return e; }
+  function muere(s){
+    if (s.muerto) return;
+    s.muerto = true;
+    s.onopen = s.onmessage = s.onclose = s.onerror = null;
+    try { s.close(); } catch (e) {}
+    if (ws === s) ws = null;
+    if (latido) { clearInterval(latido); latido = null; }
+    cambia(false);
+    luego(sube());
+  }
+  function abre(){
+    reloj = null;
+    if (ws) return;
+    var cr = null;
+    try { cr = o.cred(); } catch (e) {}
+    if (!cr) { luego(15000); return; }
+    fetch("/vivo-pase", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ c: o.clave, p: cr.p || "", s: cr.s || "", pin: cr.pin || "" }) })
+    .then(function(r){ return r.json().catch(function(){ return {}; }); })
+    .then(function(j){
+      if (j && j.sin_vivo) { luego(1800000); return; }
+      if (!j || !j.ok || !j.t) { luego(sube()); return; }
+      var s = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host +
+        "/vivo?c=" + encodeURIComponent(o.clave) + "&t=" + encodeURIComponent(j.t));
+      ws = s;
+      s.onopen = function(){
+        espera = 3000; ultimo = Date.now(); cambia(true);
+        latido = setInterval(function(){
+          if (Date.now() - ultimo > 75000) { muere(s); return; }
+          try { s.send("ping"); } catch (e) {}
+        }, 30000);
+      };
+      s.onmessage = function(ev){
+        ultimo = Date.now();
+        if (ev.data === "pong") return;
+        var m = null;
+        try { m = JSON.parse(ev.data); } catch (e) {}
+        /* Al cobrar una mesa se cambian varios pedidos de golpe: los avisos
+           que llegan juntos se leen una sola vez. */
+        if (m && m.tipo === "pedido" && !junta) {
+          junta = setTimeout(function(){ junta = null; try { o.alAviso(m); } catch (e) {} }, 150);
+        }
+      };
+      s.onclose = function(){ muere(s); };
+      s.onerror = function(){ muere(s); };
+    })
+    .catch(function(){ luego(sube()); });
+  }
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState === "visible" && !ws && reloj) { clearTimeout(reloj); abre(); }
+  });
+  abre();
+  return yo;
+}
+/* Con el hilo abierto, el sondeo baja a 60 s (red de seguridad). Al abrirse
+   o caerse, se lee una vez por si algo entro en medio. */
+vivoArranca({
+  clave: CLAVE,
+  cred: function(){ return { p: MI_LLAVE, s: MI_SELLO }; },
+  alAviso: function(){ cargar(); },
+  alCambio: function(v){
+    if (timer) clearInterval(timer);
+    timer = setInterval(cargar, v ? 60000 : 8000);
+    cargar();
+  }
+});
 })();
 <\/script>
 </body>
@@ -3544,10 +3620,84 @@ document.addEventListener("visibilitychange", function(){
   if (document.visibilityState === "visible" && PIN) cargar();
 });
 
+/* LA COCINA EN VIVO (2.9.63-vivo). Un hilo abierto con el servidor: cuando
+   entra o cambia un pedido, llega un aviso corto y la pantalla se refresca al
+   momento. Si el hilo no abre o se cae, todo sigue como antes: el sondeo. */
+function vivoArranca(o){
+  var yo = { conectado: false };
+  if (!window.WebSocket || !window.fetch || !/^https?:$/.test(location.protocol)) return yo;
+  var ws = null, espera = 3000, reloj = null, latido = null, ultimo = 0, junta = null;
+  function cambia(v){ if (yo.conectado === v) return; yo.conectado = v; try { o.alCambio(v); } catch (e) {} }
+  function luego(ms){ if (reloj) clearTimeout(reloj); reloj = setTimeout(abre, ms); }
+  function sube(){ var e = espera; espera = Math.min(espera * 2, 60000); return e; }
+  function muere(s){
+    if (s.muerto) return;
+    s.muerto = true;
+    s.onopen = s.onmessage = s.onclose = s.onerror = null;
+    try { s.close(); } catch (e) {}
+    if (ws === s) ws = null;
+    if (latido) { clearInterval(latido); latido = null; }
+    cambia(false);
+    luego(sube());
+  }
+  function abre(){
+    reloj = null;
+    if (ws) return;
+    var cr = null;
+    try { cr = o.cred(); } catch (e) {}
+    if (!cr) { luego(15000); return; }
+    fetch("/vivo-pase", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ c: o.clave, p: cr.p || "", s: cr.s || "", pin: cr.pin || "" }) })
+    .then(function(r){ return r.json().catch(function(){ return {}; }); })
+    .then(function(j){
+      if (j && j.sin_vivo) { luego(1800000); return; }
+      if (!j || !j.ok || !j.t) { luego(sube()); return; }
+      var s = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host +
+        "/vivo?c=" + encodeURIComponent(o.clave) + "&t=" + encodeURIComponent(j.t));
+      ws = s;
+      s.onopen = function(){
+        espera = 3000; ultimo = Date.now(); cambia(true);
+        latido = setInterval(function(){
+          if (Date.now() - ultimo > 75000) { muere(s); return; }
+          try { s.send("ping"); } catch (e) {}
+        }, 30000);
+      };
+      s.onmessage = function(ev){
+        ultimo = Date.now();
+        if (ev.data === "pong") return;
+        var m = null;
+        try { m = JSON.parse(ev.data); } catch (e) {}
+        /* Al cobrar una mesa se cambian varios pedidos de golpe: los avisos
+           que llegan juntos se leen una sola vez. */
+        if (m && m.tipo === "pedido" && !junta) {
+          junta = setTimeout(function(){ junta = null; try { o.alAviso(m); } catch (e) {} }, 150);
+        }
+      };
+      s.onclose = function(){ muere(s); };
+      s.onerror = function(){ muere(s); };
+    })
+    .catch(function(){ luego(sube()); });
+  }
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState === "visible" && !ws && reloj) { clearTimeout(reloj); abre(); }
+  });
+  abre();
+  return yo;
+}
+var VIVO_CAJA = null;
 function arrancar(){
   if (timer) clearInterval(timer);
   cargar();
-  timer = setInterval(cargar, 8000);
+  timer = setInterval(cargar, (VIVO_CAJA && VIVO_CAJA.conectado) ? 60000 : 8000);
+  if (!VIVO_CAJA) VIVO_CAJA = vivoArranca({
+    clave: CLAVE,
+    cred: function(){ return PIN ? { pin: PIN } : null; },
+    alAviso: function(){ if (PIN) cargar(); },
+    alCambio: function(v){
+      if (timer) { clearInterval(timer); timer = setInterval(cargar, v ? 60000 : 8000); }
+      if (PIN) cargar();
+    }
+  });
 }
 
 if (PIN) { puertasCaja(); arrancar(); } else puerta("");
@@ -16865,6 +17015,11 @@ var HTML_SOCIO = `<!DOCTYPE html>
   <!-- ---------- 1 · TABLERO ---------- -->
   <div class="hoja pag" id="pTablero">
     <div class="caja">
+      <h3>Ayuda a clientes</h3>
+      <p class="ay">Las dudas de los que ya tienen su kit y las cajas sin guía. Aparte de los prospectos.</p>
+      <a class="btn" href="/socio-ayuda" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none">Abrir Ayuda a clientes</a>
+    </div>
+    <div class="caja">
       <h3>Este mes</h3>
       <p class="ay" id="tMesNombre">&nbsp;</p>
       <div class="dinero" id="tCobrado">$0</div>
@@ -21970,6 +22125,12 @@ function alPapel(liga){
           traeMesasAbiertas();
           traeEntrando();
         }, 25000);
+        if (!VIVO_TPV) VIVO_TPV = vivoArranca({
+          clave: CLAVE,
+          cred: function(){ return estado.pin ? { pin: estado.pin } : null; },
+          alAviso: function(){ if (estado.pin) { traeEntrando(); traeMesasAbiertas(); } },
+          alCambio: function(v){ if (estado.pin) { traeEntrando(); traeMesasAbiertas(); } }
+        });
       })
       .catch(function(){
         b.disabled = false;
@@ -22098,6 +22259,71 @@ function alPapel(liga){
      hace cuanto. El mesero sigue yendo, que de eso vive el servicio; lo que
      se le quita es la vuelta en falso. */
   var relojLlamadas = null;
+  var VIVO_TPV = null;
+  /* LA COCINA EN VIVO (2.9.63-vivo). Un hilo abierto con el servidor: cuando
+     entra o cambia un pedido, llega un aviso corto y la pantalla se refresca al
+     momento. Si el hilo no abre o se cae, todo sigue como antes: el sondeo. */
+  function vivoArranca(o){
+    var yo = { conectado: false };
+    if (!window.WebSocket || !window.fetch || !/^https?:$/.test(location.protocol)) return yo;
+    var ws = null, espera = 3000, reloj = null, latido = null, ultimo = 0, junta = null;
+    function cambia(v){ if (yo.conectado === v) return; yo.conectado = v; try { o.alCambio(v); } catch (e) {} }
+    function luego(ms){ if (reloj) clearTimeout(reloj); reloj = setTimeout(abre, ms); }
+    function sube(){ var e = espera; espera = Math.min(espera * 2, 60000); return e; }
+    function muere(s){
+      if (s.muerto) return;
+      s.muerto = true;
+      s.onopen = s.onmessage = s.onclose = s.onerror = null;
+      try { s.close(); } catch (e) {}
+      if (ws === s) ws = null;
+      if (latido) { clearInterval(latido); latido = null; }
+      cambia(false);
+      luego(sube());
+    }
+    function abre(){
+      reloj = null;
+      if (ws) return;
+      var cr = null;
+      try { cr = o.cred(); } catch (e) {}
+      if (!cr) { luego(15000); return; }
+      fetch("/vivo-pase", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ c: o.clave, p: cr.p || "", s: cr.s || "", pin: cr.pin || "" }) })
+      .then(function(r){ return r.json().catch(function(){ return {}; }); })
+      .then(function(j){
+        if (j && j.sin_vivo) { luego(1800000); return; }
+        if (!j || !j.ok || !j.t) { luego(sube()); return; }
+        var s = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host +
+          "/vivo?c=" + encodeURIComponent(o.clave) + "&t=" + encodeURIComponent(j.t));
+        ws = s;
+        s.onopen = function(){
+          espera = 3000; ultimo = Date.now(); cambia(true);
+          latido = setInterval(function(){
+            if (Date.now() - ultimo > 75000) { muere(s); return; }
+            try { s.send("ping"); } catch (e) {}
+          }, 30000);
+        };
+        s.onmessage = function(ev){
+          ultimo = Date.now();
+          if (ev.data === "pong") return;
+          var m = null;
+          try { m = JSON.parse(ev.data); } catch (e) {}
+          /* Al cobrar una mesa se cambian varios pedidos de golpe: los avisos
+             que llegan juntos se leen una sola vez. */
+          if (m && m.tipo === "pedido" && !junta) {
+            junta = setTimeout(function(){ junta = null; try { o.alAviso(m); } catch (e) {} }, 150);
+          }
+        };
+        s.onclose = function(){ muere(s); };
+        s.onerror = function(){ muere(s); };
+      })
+      .catch(function(){ luego(sube()); });
+    }
+    document.addEventListener("visibilitychange", function(){
+      if (document.visibilityState === "visible" && !ws && reloj) { clearTimeout(reloj); abre(); }
+    });
+    abre();
+    return yo;
+  }
 
   /* ============ lo que lleva cada mesa (solo el mesero) ============
      Edsi lo pidio asi: "tambien considero prudente aqui si que el mesero se
@@ -27918,6 +28144,10 @@ async function traerCon(env, tablaId, condiciones) {
 }
 __name(traerCon, "traerCon");
 async function insertarFilas(env, tablaId, filas) {
+  return vivoTrasEscribir(env, tablaId, await insertarFilasSinAviso(env, tablaId, filas), "", null);
+}
+__name(insertarFilas, "insertarFilas");
+async function insertarFilasSinAviso(env, tablaId, filas) {
   const modo = modoDatos(env);
   if (modo === "d1") return d1Insertar(env, tablaId, filas);
   const hechas = await n8nInsertarFilas(env, tablaId, filas);
@@ -27932,8 +28162,12 @@ async function insertarFilas(env, tablaId, filas) {
   }
   return hechas;
 }
-__name(insertarFilas, "insertarFilas");
+__name(insertarFilasSinAviso, "insertarFilasSinAviso");
 async function actualizarFilas(env, tablaId, condiciones, datos) {
+  return vivoTrasEscribir(env, tablaId, await actualizarFilasSinAviso(env, tablaId, condiciones, datos), "", condiciones);
+}
+__name(actualizarFilas, "actualizarFilas");
+async function actualizarFilasSinAviso(env, tablaId, condiciones, datos) {
   const modo = modoDatos(env);
   if (modo === "d1") return d1Actualizar(env, tablaId, condiciones, datos);
   const hechas = await n8nActualizarFilas(env, tablaId, condiciones, datos);
@@ -27949,8 +28183,12 @@ async function actualizarFilas(env, tablaId, condiciones, datos) {
   }
   return hechas;
 }
-__name(actualizarFilas, "actualizarFilas");
+__name(actualizarFilasSinAviso, "actualizarFilasSinAviso");
 async function borrarPorIds(env, tablaId, clave, ids) {
+  return vivoTrasEscribir(env, tablaId, await borrarPorIdsSinAviso(env, tablaId, clave, ids), clave, null);
+}
+__name(borrarPorIds, "borrarPorIds");
+async function borrarPorIdsSinAviso(env, tablaId, clave, ids) {
   const modo = modoDatos(env);
   if (modo !== "d1") {
     const idos = await n8nBorrarPorIds(env, tablaId, clave, ids);
@@ -27974,7 +28212,108 @@ async function borrarPorIds(env, tablaId, clave, ids) {
   if (!van.length) return [];
   return d1QuitarIds(env, tablaId, dueno, van);
 }
-__name(borrarPorIds, "borrarPorIds");
+__name(borrarPorIdsSinAviso, "borrarPorIdsSinAviso");
+
+/* LA COCINA EN VIVO (2.9.63-vivo). Cuando se escribe en la tabla de pedidos,
+   se le avisa al Durable Object del negocio, y el le avisa a las pantallas
+   abiertas (cocina, caja, TPV). El aviso NUNCA tumba la escritura: se espera
+   maximo VIVO_ESPERA_MS, los errores se tragan y, si el objeto falla, se deja
+   de avisar 30 s para no hacer esperar a nadie. Sin el binding COCINA_VIVO no
+   hace nada: todo sigue con el sondeo, como antes. */
+var VIVO_ESPERA_MS = 1500;
+var VIVO_TOPE = 40;
+var VIVO_ESTADO = { avisos: 0, errores: 0, pausaHasta: 0, ultimoError: "" };
+function vivoHay(env) {
+  return !!(env && env.COCINA_VIVO && typeof env.COCINA_VIVO.idFromName === "function");
+}
+__name(vivoHay, "vivoHay");
+function vivoClave(c) {
+  return String(c == null ? "" : c).trim().toLowerCase();
+}
+__name(vivoClave, "vivoClave");
+function vivoSecreto(env) {
+  return String(env && (env.LLAVE_ADMIN || env.TG_TOKEN) || "").trim();
+}
+__name(vivoSecreto, "vivoSecreto");
+async function vivoAvisa(env, clave, ids) {
+  if (!vivoHay(env)) return false;
+  const c = vivoClave(clave);
+  if (!c || Date.now() < VIVO_ESTADO.pausaHasta) return false;
+  let reloj = null;
+  try {
+    const stub = env.COCINA_VIVO.get(env.COCINA_VIVO.idFromName(c));
+    const limpio = (ids || []).map(Number).filter(function(n) { return n > 0; }).slice(0, 20);
+    const va = stub.fetch("https://vivo.interno/avisa", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids: limpio })
+    });
+    const tarde = new Promise(function(_, mal) {
+      reloj = setTimeout(function() { mal(new Error("el objeto en vivo tardo mas de " + VIVO_ESPERA_MS + " ms")); }, VIVO_ESPERA_MS);
+    });
+    const r = await Promise.race([va, tarde]);
+    VIVO_ESTADO.avisos++;
+    return !!(r && r.ok);
+  } catch (e) {
+    VIVO_ESTADO.errores++;
+    VIVO_ESTADO.pausaHasta = Date.now() + 30e3;
+    VIVO_ESTADO.ultimoError = String(e && e.message || e).slice(0, 160);
+    try { console.error("cocina en vivo: no se pudo avisar: " + VIVO_ESTADO.ultimoError); } catch (x) {}
+    return false;
+  } finally {
+    if (reloj) clearTimeout(reloj);
+  }
+}
+__name(vivoAvisa, "vivoAvisa");
+async function vivoTrasEscribir(env, tablaId, hechas, claveSabida, condiciones) {
+  try {
+    if (!vivoHay(env) || String(tablaId) !== String(TABLAS.pedidos)) return hechas;
+    if (!Array.isArray(hechas) || !hechas.length) return hechas;
+    let deRespaldo = vivoClave(claveSabida);
+    if (!deRespaldo) {
+      for (const x of condiciones || []) {
+        if (x && x.columnName === "clave") deRespaldo = vivoClave(x.value);
+      }
+    }
+    const por = {};
+    for (const f of hechas) {
+      const c = vivoClave(f && f.clave) || deRespaldo;
+      if (!c) continue;
+      (por[c] = por[c] || []).push(f && f.id);
+    }
+    const claves = Object.keys(por).slice(0, 5);
+    if (claves.length) {
+      await Promise.all(claves.map(function(c) { return vivoAvisa(env, c, por[c]).catch(function() { return false; }); }));
+    }
+  } catch (e) {
+  }
+  return hechas;
+}
+__name(vivoTrasEscribir, "vivoTrasEscribir");
+/* El pase para abrir el WebSocket: dura 2 minutos y va firmado con el secreto
+   del Worker. Asi el NIP de la caja no viaja en la direccion del WebSocket. */
+async function vivoFirma(env, clave, vence) {
+  const semilla = "vivo:" + vivoClave(clave) + ":" + String(vence) + ":" + vivoSecreto(env);
+  const crudo = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(semilla));
+  const bytes = new Uint8Array(crudo);
+  let hex = "";
+  for (let i = 0; i < 16; i++) hex += bytes[i].toString(16).padStart(2, "0");
+  return hex;
+}
+__name(vivoFirma, "vivoFirma");
+async function vivoPase(env, clave) {
+  const vence = Date.now() + 120e3;
+  return vence.toString(36) + "." + await vivoFirma(env, clave, vence);
+}
+__name(vivoPase, "vivoPase");
+async function vivoPaseBueno(env, clave, pase) {
+  const partes = String(pase || "").split(".");
+  if (partes.length !== 2 || !vivoSecreto(env)) return false;
+  const vence = parseInt(partes[0], 36);
+  if (!isFinite(vence) || vence < Date.now() || vence > Date.now() + 300e3) return false;
+  return partes[1] === await vivoFirma(env, clave, vence);
+}
+__name(vivoPaseBueno, "vivoPaseBueno");
 
 /* /d1-compara: cuantos renglones hay en n8n y en D1, tabla por tabla. Con
    un negocio (c), tambien que renglones faltan, sobran o no son iguales.
@@ -36706,6 +37045,112 @@ function enviaEsc(t) {
 }
 function enviaLigaCliente(id) { return "https://" + DOMINIO_PUBLICO + "/envio/" + id; }
 function envioQs(envio) { return envio && envio.id ? "&e=" + envio.id : ""; }
+/* ===================== EL CORREO AL QUE COMPRA (2.9.63-a) =====================
+   Cloudflare Email Service: binding send_email "CORREO" + variable
+   CORREO_CLIENTES = "si". Remitente: CORREO_DE o hola@lacartamenu.com. */
+var CORREO_API = "";
+function correoPrendido(env) { return String(env && env.CORREO_CLIENTES || "").trim().toLowerCase() === "si"; }
+function correoTapa(c) { return String(c || "").replace(/^(.)[^@]*@/, "$1***@"); }
+async function correoManda(env, m) {
+  const de = String(env.CORREO_DE || "").trim() || "hola@" + DOMINIO_PUBLICO;
+  const msg = { to: m.to, from: { email: de, name: "La Carta" }, replyTo: de, subject: m.subject, text: m.text, html: m.html };
+  if (CORREO_API) {
+    const r = await fetch(CORREO_API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(msg) });
+    if (!r.ok) throw new Error("el correo contestó " + r.status);
+    return await r.json().catch(() => ({}));
+  }
+  if (!env.CORREO || typeof env.CORREO.send !== "function") throw new Error("falta el binding CORREO");
+  return await env.CORREO.send(msg);
+}
+/* x: { llave, correo, nombre, que, total, envioId, envioCosto, despues } */
+async function correoCompra(env, x) {
+  if (!correoPrendido(env) || !env.FOTOS) return { correo: "apagado" };
+  const correo = String(x.correo || "").trim().toLowerCase().slice(0, 120);
+  if (!/^[^ @<>,;"']+@[^ @<>,;"']+[.][a-z]{2,}$/.test(correo)) return { correo: "sin_correo" };
+  const llave = "correos/" + String(x.llave || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80) + ".json";
+  if (llave === "correos/.json") return { correo: "sin_llave" };
+  if (await env.FOTOS.head(llave)) return { correo: "ya" };
+  const marca = { fecha: isoMX(), a: correoTapa(correo), estado: "mandando" };
+  await stripeGuarda(env, llave, marca);
+  const esc = (t) => String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const nombre = String(x.nombre || "").replace(/[<>&"]/g, "").replace(/ +/g, " ").trim().split(" ")[0].slice(0, 30);
+  const eid = String(x.envioId || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  const total = Number(x.total) || 0;
+  const pesos = (n) => "$" + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const pago = total > 0 ? pesos(total) + (Number(x.envioCosto) > 0 ? " (incluye " + pesos(x.envioCosto) + " de envío a domicilio)" : "") : "$0 (hoy no se te cobró nada)";
+  const liga = eid ? "https://" + DOMINIO_PUBLICO + "/envio/" + eid : "";
+  const ayuda = "https://" + DOMINIO_PUBLICO + "/ayuda";
+  const ren = [
+    "Hola" + (nombre ? " " + nombre : "") + ":",
+    "",
+    "Recibimos tu pago. ¡Gracias por comprar La Carta!",
+    "",
+    "Lo que compraste: " + x.que,
+    "Pagaste: " + pago
+  ];
+  if (x.despues) ren.push(x.despues);
+  if (liga) ren.push("", "Sigue tu caja aquí: " + liga, "Ahí ves cuándo sale y por dónde va.");
+  ren.push("", "¿Tienes una duda? Entra a " + ayuda, "", "Por ahora no emitimos factura.", "", "La Carta");
+  const text = ren.join("\n");
+  const html = "<div style=\"font-family:Arial,sans-serif;font-size:16px;line-height:1.5;color:#1b1f22;max-width:480px\">" +
+    "<p>Hola" + (nombre ? " " + esc(nombre) : "") + ":</p><p><b>Recibimos tu pago.</b> ¡Gracias por comprar La Carta!</p>" +
+    "<p>Lo que compraste: <b>" + esc(x.que) + "</b><br>Pagaste: <b>" + esc(pago) + "</b>" + (x.despues ? "<br>" + esc(x.despues) : "") + "</p>" +
+    (liga ? "<p><a href=\"" + esc(liga) + "\" style=\"display:inline-block;background:#8fd6ac;color:#0e1113;padding:12px 18px;border-radius:10px;font-weight:bold;text-decoration:none\">Seguir mi caja</a><br><span style=\"font-size:14px;color:#555\">Ahí ves cuándo sale y por dónde va.</span></p>" : "") +
+    "<p>¿Tienes una duda? Entra a <a href=\"" + esc(ayuda) + "\">lacartamenu.com/ayuda</a></p>" +
+    "<p style=\"font-size:14px;color:#555\">Por ahora no emitimos factura.</p><p>La Carta</p></div>";
+  try {
+    await correoManda(env, { to: correo, subject: "Recibimos tu pago · La Carta", text, html });
+    marca.estado = "mandado";
+    await stripeGuarda(env, llave, marca);
+    return { correo: "mandado" };
+  } catch (e) {
+    const motivo = String(e && (e.code || e.message) || e).slice(0, 120);
+    marca.estado = "fallo"; marca.motivo = motivo;
+    try { await stripeGuarda(env, llave, marca); } catch (e2) {}
+    try { await avisaEdsiRed(env, "✉️ No pude mandarle el correo de su compra a " + esc(correoTapa(correo)) + " (" + esc(motivo) + "). El pago sí quedó."); } catch (e3) {}
+    return { correo: "fallo", motivo };
+  }
+}
+/* Del aviso de Stripe: solo cuando el pago QUEDO (no fichas ni vencidas). */
+async function correoDeStripe(env, o, md, salida) {
+  const pagado = salida && (salida.estado === "pagado" || salida.enganche === "pagado" || salida.suscripcion === "activa");
+  if (!pagado || !correoPrendido(env)) return { correo: "no_toca" };
+  const cd = o.customer_details || {};
+  let correo = cd.email || o.customer_email || "", nombre = cd.name || "";
+  let reg = null;
+  const sid = String(md.suscripcion || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  if (sid) { try { reg = await stripeLee(env, "suscripciones/" + sid + ".json"); } catch (e) { reg = null; } }
+  if (reg) { correo = correo || reg.correo; nombre = nombre || reg.dueno; }
+  const mes = "$" + SUSCRIPCION.mensual + " al mes";
+  let que = "", despues = "";
+  if (md.que === "kit") que = "La Carta · Comandero C1 de contado (un año de servicio)";
+  else if (md.que === "enganche") { que = "El enganche de tu La Carta · Comandero C1"; despues = "Después: " + mes + " con tarjeta."; }
+  else if (md.que === "suscripcion") {
+    que = md.efectivo === "1" || md.enganche === "aparte" ? "Tu servicio de La Carta: " + mes : "La Carta · Comandero C1: enganche y servicio de " + mes;
+    despues = "Tu primer cobro de " + mes + " es dentro de 30 días.";
+  } else return { correo: "no_toca" };
+  return await correoCompra(env, { llave: "st-" + String(o.id || ""), correo, nombre, que, despues, total: Number(o.amount_total) / 100 || 0,
+    envioId: md.envio || (reg && reg.envio) || "", envioCosto: Number(md.envio_costo) || 0 });
+}
+/* Del aviso de Mercado Pago (kit a 3 meses y enganche). */
+async function correoDeMp(env, pagoId, pago, ref) {
+  if (!correoPrendido(env)) return { correo: "no_toca" };
+  const p = pago.payer || {};
+  let correo = p.email || "", nombre = p.first_name || "", que = "", despues = "", reg = null;
+  if (ref.indexOf("kite|") === 0) {
+    try { reg = await stripeLee(env, "suscripciones/" + ref.slice(5).replace(/[^a-z0-9]/g, "").slice(0, 20) + ".json"); } catch (e) { reg = null; }
+    if (reg) { correo = reg.correo || correo; nombre = reg.dueno || nombre; }
+    que = "El enganche de tu La Carta · Comandero C1"; despues = "Después: $" + SUSCRIPCION.mensual + " al mes.";
+  } else {
+    const pd = plazoDe(ref.split("|")[1]);
+    que = "La Carta · Comandero C1" + (pd ? " a " + pd.meses + " meses sin intereses" : "");
+  }
+  const eid = (pago.metadata && pago.metadata.envio) || (reg && reg.envio) || "";
+  let costo = 0;
+  if (eid) { try { const e = await stripeLee(env, "envios/" + String(eid).replace(/[^a-z0-9]/g, "").slice(0, 20) + ".json"); costo = e ? Number(e.costo) || 0 : 0; } catch (e) {} }
+  return await correoCompra(env, { llave: "mp-" + String(pagoId), correo, nombre, que, despues, total: Number(pago.transaction_amount || 0), envioId: eid, envioCosto: costo });
+}
+/* ===================== /EL CORREO AL QUE COMPRA ===================== */
 async function enviaLeeConEtag(env, id) {
   const o = await env.FOTOS.get("envios/" + id + ".json");
   if (!o) return null;
@@ -36891,7 +37336,7 @@ async function enviaPrueba(env) {
   await stripeGuarda(env, "envia/prueba5.json", sal);
   return sal;
 }
-async function enviaGuia(env, id, prueba) {
+async function enviaGuia(env, id, prueba, callado) {
   if (!String(env.ENVIA_TOKEN || "").trim()) return { ok: false, motivo: "sin_llave" };
   const x = await enviaLeeConEtag(env, id);
   if (!x) return { ok: false, motivo: "no_existe" };
@@ -36910,7 +37355,7 @@ async function enviaGuia(env, id, prueba) {
     const edo = enviaEstado(reg.estado);
     if (!edo) {
       await queda("guia_fallo", { guia_motivo: "no reconozco el estado" });
-      await avisaEdsiRed(env, "⚠️ No pude hacer la guía (no reconozco el estado \"" + enviaEsc(reg.estado) + "\"), hazla a mano en Envia.com" + pr +
+      if (!callado) await avisaEdsiRed(env, "⚠️ No pude hacer la guía (no reconozco el estado \"" + enviaEsc(reg.estado) + "\"), hazla a mano en Envia.com" + pr +
         "\nPara: " + enviaEsc(reg.recibe) + " · CP " + reg.cp + ", " + enviaEsc(reg.ciudad) + "\nSu página: " + enviaEsc(liga));
       return { ok: false, motivo: "estado" };
     }
@@ -36922,7 +37367,7 @@ async function enviaGuia(env, id, prueba) {
       suc = await enviaSucursal(env, slug, reg.cp, 2);
       if (!suc) {
         await queda("guia_manual", { guia_motivo: "Envia no dio sucursal PuntoPost" });
-        await avisaEdsiRed(env, "🏪 <b>PuntoPost: haz esta guía a mano en Envia.com</b>" + pr + ". No pude escoger la sucursal sola: busca la PuntoPost más cercana al CP " + reg.cp + ". Si no hay, llámale a " + reg.telefono + " antes de mandarla." +
+        if (!callado) await avisaEdsiRed(env, "🏪 <b>PuntoPost: haz esta guía a mano en Envia.com</b>" + pr + ". No pude escoger la sucursal sola: busca la PuntoPost más cercana al CP " + reg.cp + ". Si no hay, llámale a " + reg.telefono + " antes de mandarla." +
           "\n" + enviaEsc(reg.recibe) + " · " + enviaEsc(reg.ciudad) + ", " + enviaEsc(reg.estado) + "\nNo hice guía. Su página: " + enviaEsc(liga));
         return { ok: false, motivo: "sin_sucursal" };
       }
@@ -36971,7 +37416,7 @@ async function enviaGuia(env, id, prueba) {
     const motivo = enviaMotivo(e);
     try { await queda("guia_fallo", { guia_motivo: motivo }); } catch (e2) {}
     try {
-      await avisaEdsiRed(env, "⚠️ No pude hacer la guía (" + enviaEsc(motivo) + "), hazla a mano en Envia.com" + pr +
+      if (!callado) await avisaEdsiRed(env, "⚠️ No pude hacer la guía (" + enviaEsc(motivo) + "), hazla a mano en Envia.com" + pr +
         "\nPara: " + enviaEsc(reg.recibe) + " · CP " + reg.cp + ", " + enviaEsc(reg.ciudad) + "\nSu página: " + enviaEsc(liga));
     } catch (e3) {}
     return { ok: false, motivo };
@@ -37025,6 +37470,142 @@ async function enviaAviso(env, request) {
   await enviaRastreo(env, idx.id, reg, true);
   return { ok: true };
 }
+/* ===================== LAS REVISIONES DE LAS CAJAS (2.9.63-b) ===================== */
+var ENVIOS_CRON_DIARIO = "0 15 * * *";
+var ENVIOS_DIAS_PENDIENTE = 45;
+var ENVIA_SALDO_BAJO = 300;
+function cronSoloRastreo(evento) {
+  const c = String(evento && evento.cron || "").trim();
+  return !!c && c !== ENVIOS_CRON_DIARIO;
+}
+async function enviosTodos(env) {
+  const ids = [];
+  let cursor;
+  for (let v = 0; v < 20; v++) {
+    const l = await env.FOTOS.list({ prefix: "envios/", limit: 1000, cursor });
+    for (const o of l.objects || []) {
+      const m = String(o.key).match(/^envios[/]([a-z0-9]{1,20})[.]json$/);
+      if (m) ids.push(m[1]);
+    }
+    if (!l.truncated) break;
+    cursor = l.cursor;
+  }
+  return ids;
+}
+function envioReintentable(reg) {
+  return (reg.guia === "guia_fallo" && /saldo/i.test(String(reg.guia_motivo || ""))) || reg.guia === "guia_manual";
+}
+function envioReciente(reg) {
+  const t = Date.parse(String(reg.pagado || ""));
+  return isFinite(t) && Date.now() - t < ENVIOS_DIAS_PENDIENTE * 864e5;
+}
+function envioQuien(reg) {
+  return enviaEsc(reg.recibe || "?") + " · " + enviaEsc(reg.ciudad || "") + ", " + enviaEsc(reg.estado || "");
+}
+/* completo = el del dia (reintentos y resumen). Si no, solo el rastreo. */
+async function enviosRevisa(env, completo) {
+  const sal = { revisadas: 0, avisos: 0, reintentos: 0, guias: 0, porMandar: 0, sinGuia: [], saldo: null, sinSaldo: false };
+  if (!env.FOTOS) return sal;
+  const conToken = !!String(env.ENVIA_TOKEN || "").trim();
+  const hoy = isoMX().slice(0, 10);
+  let saldoFecha = "";
+  for (const id of await enviosTodos(env)) {
+    let reg;
+    try { reg = await stripeLee(env, "envios/" + id + ".json"); } catch (e) { reg = null; }
+    if (!reg || !reg.pagado || reg.a_mano_sin_guia) continue;
+    try {
+      /* 1. el rastreo */
+      if (reg.guia === "lista" && reg.trackingNumber) {
+        if (conToken && !(reg.rastreo && reg.rastreo.paso === "entregado")) { reg = await enviaRastreo(env, id, reg, true); sal.revisadas++; }
+        const paso = (reg.rastreo && reg.rastreo.paso) || "";
+        if ((paso === "entregado" || paso === "problema") && reg.avisado_paso !== paso) {
+          reg.avisado_paso = paso;
+          await stripeGuarda(env, "envios/" + id + ".json", reg);
+          const liga = enviaLigaCliente(id);
+          if (paso === "entregado") await avisaEdsiRed(env, "✅ <b>Caja entregada</b>: " + envioQuien(reg) + "\n" + enviaEsc(reg.paqueteria || reg.carrier || "") + " " + enviaEsc(reg.trackingNumber) + "\nSu página: " + enviaEsc(liga));
+          else await avisaEdsiRed(env, "⚠️ <b>La paquetería reporta un problema con una caja</b>: " + envioQuien(reg) + "\n" + enviaEsc(reg.paqueteria || reg.carrier || "") + " " + enviaEsc(reg.trackingNumber) +
+            (reg.rastreo && reg.rastreo.ultimo ? "\nÚltimo movimiento: " + enviaEsc(reg.rastreo.ultimo) : "") + "\nLlámale a " + enviaEsc(reg.telefono || "?") + ". Su página: " + enviaEsc(liga));
+          sal.avisos++;
+        }
+        if ((paso === "" || paso === "guia") && envioReciente(reg)) sal.porMandar++;
+        if (reg.saldo_envia != null && String(reg.fecha_guia || "") > saldoFecha) { saldoFecha = String(reg.fecha_guia || ""); sal.saldo = Number(reg.saldo_envia); }
+        continue;
+      }
+      if (reg.a_mano) continue;
+      /* 2. los reintentos: solo en el del dia, uno por caja al dia */
+      if (completo && conToken && envioReintentable(reg) && reg.reintento_dia !== hoy) {
+        const x = await enviaLeeConEtag(env, id);
+        if (x && x.reg.pagado && envioReintentable(x.reg) && x.reg.reintento_dia !== hoy) {
+          const r2 = x.reg;
+          r2.reintento_dia = hoy; r2.reintentos = (Number(r2.reintentos) || 0) + 1; r2.guia_antes = r2.guia; r2.guia = "";
+          if (await enviaGuardaSi(env, id, r2, x.etag)) {
+            sal.reintentos++;
+            const g = await enviaGuia(env, id, "", true);
+            if (g && g.ok) sal.guias++;
+          }
+        }
+        reg = (await stripeLee(env, "envios/" + id + ".json")) || reg;
+        if (reg.guia === "lista") continue;
+      }
+      if (/saldo/i.test(String(reg.guia_motivo || ""))) sal.sinSaldo = true;
+      if (envioReciente(reg)) sal.sinGuia.push({ id, pagado: String(reg.pagado || ""), quien: envioQuien(reg), motivo: String(reg.guia_motivo || (reg.guia === "en_proceso" ? "se quedó a medias" : conToken ? "sin guía" : "sin llave de Envia")).slice(0, 60) });
+    } catch (e) {}
+  }
+  if (!completo) return sal;
+  /* 3. el resumen, solo si hay algo que hacer (las mas nuevas primero) */
+  sal.sinGuia.sort((a, b) => (a.pagado < b.pagado ? 1 : -1));
+  const ren = [];
+  if (sal.porMandar) ren.push("\u{1F4E6} " + sal.porMandar + (sal.porMandar === 1 ? " caja por mandar" : " cajas por mandar") + " (ya tienen guía: llévalas a la paquetería)");
+  if (sal.sinGuia.length) {
+    ren.push("\u{1F3F7}️ " + sal.sinGuia.length + (sal.sinGuia.length === 1 ? " guía sin hacer:" : " guías sin hacer:"));
+    for (const g of sal.sinGuia.slice(0, 6)) ren.push("  · " + g.quien + " — " + enviaEsc(g.motivo));
+    if (sal.sinGuia.length > 6) ren.push("  · y " + (sal.sinGuia.length - 6) + " más");
+  }
+  if (sal.sinSaldo || (sal.saldo != null && sal.saldo < ENVIA_SALDO_BAJO)) ren.push("\u{1F4B8} Saldo de Envia bajo" + (sal.saldo != null ? ": $" + sal.saldo.toFixed(2) : "") + ". Recarga para que las guías salgan solas.");
+  if (sal.guias) ren.push("✅ Hoy salieron solas " + sal.guias + (sal.guias === 1 ? " guía que estaba atorada." : " guías que estaban atoradas."));
+  if (ren.length && (sal.porMandar || sal.sinGuia.length || sal.sinSaldo || (sal.saldo != null && sal.saldo < ENVIA_SALDO_BAJO))) {
+    await avisaEdsiRed(env, "\u{1F5D2}️ <b>Pendientes de las cajas</b>\n" + ren.join("\n") +
+      (sal.sinGuia.length ? "\nSi ya mandaste alguna a mano, márcala en " + DOMINIO_PUBLICO + "/socio-ayuda" : ""));
+    sal.resumen = true;
+  }
+  return sal;
+}
+/* Para el panel: lo que falta mandar. Pide LLAVE_ADMIN. */
+async function enviosPendientes(env, clave, d) {
+  pideAdmin(env, d);
+  const lista = [];
+  for (const id of await enviosTodos(env)) {
+    const reg = await stripeLee(env, "envios/" + id + ".json");
+    if (!reg || !reg.pagado || reg.guia === "lista" || reg.a_mano || reg.a_mano_sin_guia || !envioReciente(reg)) continue;
+    lista.push({ id, recibe: String(reg.recibe || ""), ciudad: String(reg.ciudad || ""), estado: String(reg.estado || ""), cp: String(reg.cp || ""),
+      telefono: String(reg.telefono || ""), modo: String(reg.modo || ""), pagado: String(reg.pagado || ""), motivo: String(reg.guia_motivo || reg.guia || "sin guía"), liga: enviaLigaCliente(id) });
+  }
+  lista.sort((a, b) => (a.pagado < b.pagado ? 1 : -1));
+  return { ok: true, tipo: "envios_pendientes", lista };
+}
+/* Edsi la mando a mano. Con numero de guia, se rastrea y el cliente lo ve. */
+async function envioAMano(env, clave, d) {
+  pideAdmin(env, d);
+  const id = String(d && d.id || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
+  const x = id ? await enviaLeeConEtag(env, id) : null;
+  if (!x) throw new Error("no encontré esa caja");
+  const reg = x.reg;
+  if (!reg.pagado) throw new Error("esa caja no está pagada");
+  if (reg.guia === "lista") throw new Error("esa caja ya tiene guía");
+  const g = String(d.guia || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 40);
+  if (g && g.length < 6) throw new Error("el número de guía se ve muy corto");
+  if (g) {
+    reg.guia = "lista"; reg.estado_envio = "guia_lista"; reg.trackingNumber = g;
+    reg.paqueteria = String(d.paqueteria || "").replace(/[<>&"]/g, "").slice(0, 40) || "Paquetería";
+    reg.fecha_guia = isoMX(); reg.guia_motivo = ""; reg.a_mano = isoMX();
+  } else {
+    reg.a_mano_sin_guia = isoMX();
+  }
+  if (!(await enviaGuardaSi(env, id, reg, x.etag))) throw new Error("alguien la cambió al mismo tiempo; vuelve a intentar");
+  if (g) { try { await stripeGuarda(env, "envios/guias/" + g + ".json", { id }); } catch (e) {} }
+  return { ok: true, tipo: "envio_a_mano", id, guia: g };
+}
+/* ===================== /LAS REVISIONES DE LAS CAJAS ===================== */
 /* LA PAGINA DEL CLIENTE: /envio/<id>. Solo ciudad: nunca calle, telefono ni nombre. */
 async function enviaPagina(env, id) {
   const limpio = String(id || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
@@ -37165,6 +37746,7 @@ async function stripeProcesa(env, ev, ctx) {
   };
   const salida = await stripeProcesaUno(env, tipo, o, md, prueba, mandaEnvio);
   await mandaEnvio(null);
+  try { await correoDeStripe(env, o, md, salida); } catch (e) {}
   return salida;
 }
 async function stripeProcesaUno(env, tipo, o, md, prueba, mandaEnvio) {
@@ -38142,6 +38724,7 @@ async function mpCobrar(env, pagoId, ctx) {
         cola: "Falta que active su pago de $" + SUSCRIPCION.mensual + " al mes." };
     }
     if (eid) { try { await envioPagado(env, eid, "Mercado Pago", Number(pago.transaction_amount || 0), "", ctx, junto); } catch (e) {} }
+    try { await correoDeMp(env, pagoId, pago, ref); } catch (e) {}
     return { ok: true, motivo: "kit" };
   }
   const partes = ref.split("|");
@@ -38376,7 +38959,174 @@ var ORDEN_PROSPECTO = "Eres el asistente de La Carta (Comandero C1) en lacartame
   "Si está en cualquier otra ciudad, o no sabes dónde está, NUNCA prometas visitas, demostraciones ni instalación en persona: dile que la caja se le manda a su ciudad (gratis a una sucursal PuntoPost o $170 a su puerta), que la deja lista él mismo en unos diez minutos con el instructivo, y que puede comprarla en lacartamenu.com/comprar. " +
   "Responde SOLO un objeto JSON con esta forma: {\"respuesta\":\"...\",\"no_se\":false,\"negocio\":\"\",\"colonia\":\"\",\"nombre\":\"\",\"telefono\":\"\"}. " +
   "En negocio, colonia, nombre y telefono pon lo que el cliente haya dicho en TODA la plática, o vacío si no lo dijo.";
+/* ===================== LA AYUDA A CLIENTES (2.9.63-c) ===================== */
+var AYUDA_TOPE_PLATICA = 40;
+function ayudaLigaPanel() { return "https://" + DOMINIO_PUBLICO + "/socio-ayuda"; }
+function ayudaNorma(t) { return String(t || "").normalize("NFD").replace(/[^A-Za-z0-9]/g, "").toLowerCase(); }
+/* Liga la platica a la clave del negocio. Cada candidato se busca una sola vez. */
+async function ayudaLiga(env, reg, textos) {
+  if (reg.clave) return false;
+  reg.buscadas = Array.isArray(reg.buscadas) ? reg.buscadas : [];
+  const cand = [];
+  for (const t of textos) {
+    const low = String(t || "").toLowerCase();
+    for (const m of low.matchAll(/([a-z0-9][a-z0-9-]{1,39})[.]lacartamenu/g)) cand.push(m[1]);
+    const w = low.trim();
+    if (/^[a-z0-9-]{3,40}$/.test(w)) cand.push(w);
+  }
+  const neg = ayudaNorma(reg.negocio);
+  if (neg.length >= 3) cand.push(neg.slice(0, 40));
+  const fuera = ["www", "ayuda", "comprar", "lacartamenu", "hola", "gracias", "nip", "impresora"];
+  const nuevas = Array.from(new Set(cand)).filter((c) => reg.buscadas.indexOf(c) < 0 && fuera.indexOf(c) < 0).slice(0, 3);
+  for (const c of nuevas) {
+    reg.buscadas.push(c);
+    let cfg = null;
+    try { cfg = await traerConfig(env, c); } catch (e) { cfg = null; }
+    if (cfg && String(cfg.clave || "").toLowerCase() === c) {
+      reg.clave = c; reg.negocio_registrado = String(nombreNegocio(cfg) || cfg.texto || c).slice(0, 80); reg.ligado = isoMX();
+      return true;
+    }
+  }
+  /* por el nombre: solo si coincide con UN negocio */
+  if (neg.length >= 4 && reg.buscadas.indexOf("n:" + neg) < 0) {
+    reg.buscadas.push("n:" + neg);
+    let filas = [];
+    try { filas = await traerFilas(env, TABLAS.config); } catch (e) { filas = []; }
+    const hall = filas.filter((f) => {
+      const n = ayudaNorma(nombreNegocio(f) || f.texto);
+      return n.length >= 4 && (n === neg || (n.length >= 6 && neg.length >= 6 && (n.indexOf(neg) > -1 || neg.indexOf(n) > -1)));
+    });
+    if (hall.length === 1 && hall[0].clave) {
+      reg.clave = String(hall[0].clave).toLowerCase(); reg.negocio_registrado = String(nombreNegocio(hall[0]) || hall[0].texto || reg.clave).slice(0, 80); reg.ligado = isoMX();
+      return true;
+    }
+    if (hall.length > 1) reg.posibles = hall.slice(0, 5).map((f) => String(f.clave));
+  }
+  reg.buscadas = reg.buscadas.slice(-30);
+  return false;
+}
+function ayudaQuien(reg) {
+  return (reg.clave ? (reg.negocio_registrado || reg.clave) + " (" + reg.clave + "." + DOMINIO_PUBLICO + ")" : (reg.negocio || "(negocio sin decir)") + " — todavía no sé su clave") +
+    (reg.nombre ? " · " + reg.nombre : "") + (reg.telefono ? "\nTel: " + reg.telefono : "");
+}
+async function ayudaAvisa(env, reg, pregunta) {
+  if (reg.avisado_ms && Date.now() - reg.avisado_ms < 5 * 6e4 && reg.avisado_txt === pregunta) return;
+  reg.avisado_ms = Date.now(); reg.avisado_txt = pregunta;
+  await avisaEdsiRed(env, "\u{1F198} <b>Un cliente con kit necesita ayuda</b> (lacartamenu.com/ayuda)\n" + pregunta.replace(/[<>&]/g, "") + "\n\n" + ayudaQuien(reg).replace(/[<>&]/g, "") +
+    "\n\nVer y resolver: " + ayudaLigaPanel());
+}
+async function ayudaCharla(env, clave, d) {
+  const L = (x, n) => String(x == null ? "" : x).replace(/[<>&]/g, "").replace(/\s+/g, " ").trim().slice(0, n);
+  const ses = String(d && d.sesion || "").replace(/[^a-z0-9]/g, "").slice(0, 24);
+  if (ses.length < 8) throw new Error("recarga la página, por favor");
+  const plat = (Array.isArray(d.mensajes) ? d.mensajes : []).slice(-10)
+    .map((m) => ({ role: m && m.de === "yo" ? "user" : "assistant", content: L(m && m.t, 500) })).filter((m) => m.content);
+  if (!plat.length || plat[plat.length - 1].role !== "user") throw new Error("escribe tu duda");
+  const pregunta = plat[plat.length - 1].content;
+  const llave = "ayuda/" + ses + ".json";
+  const reg = (await stripeLee(env, llave)) || { sesion: ses, fecha: isoMX(), tipo: "ayuda", estado: "abierta", mensajes: 0, historial: [] };
+  reg.historial = Array.isArray(reg.historial) ? reg.historial : [];
+  const apunta = (de, t) => { reg.historial.push({ de, t: String(t).slice(0, 900), en: isoMX() }); reg.historial = reg.historial.slice(-60); };
+  if (reg.estado === "resuelta") { reg.estado = "abierta"; reg.reabierta = isoMX(); }
+  reg.ultima = isoMX();
+  const wa = whatsCasa(env);
+  if (reg.mensajes >= AYUDA_TOPE_PLATICA) {
+    apunta("cliente", pregunta);
+    reg.necesita = reg.necesita || isoMX();
+    await ayudaAvisa(env, reg, pregunta);
+    await stripeGuarda(env, llave, reg);
+    return { ok: true, tipo: "prospecto_charla", respuesta: "Ya platicamos bastante por aquí. Ya le avisé a una persona de La Carta para que te ayude." + (wa ? " También puedes escribirnos por WhatsApp con el botón de abajo." : ""), whatsapp: !!wa };
+  }
+  const dia = isoMX().slice(0, 10);
+  const cuenta = (await stripeLee(env, "prospectos/cuenta/" + dia + ".json")) || { n: 0 };
+  if (cuenta.n >= PROSPECTO_TOPE_DIA || !env.OPENAI_KEY) {
+    apunta("cliente", pregunta);
+    reg.necesita = reg.necesita || isoMX();
+    try { await ayudaLiga(env, reg, [pregunta]); } catch (e) {}
+    await ayudaAvisa(env, reg, pregunta);
+    await stripeGuarda(env, llave, reg);
+    return { ok: true, tipo: "prospecto_charla", respuesta: "Ahorita no puedo contestarte por aquí, pero ya le pasé tu duda a una persona de La Carta." + (wa ? " Si es urgente, escríbenos por WhatsApp con el botón de abajo." : ""), whatsapp: !!wa };
+  }
+  cuenta.n++;
+  await stripeGuarda(env, "prospectos/cuenta/" + dia + ".json", cuenta);
+  const sabido = await soporteSabido(env);
+  const hechos = SOPORTE_BASE.map((b) => "- " + b.r).concat(sabido.map((x) => "- (Edsi) " + x.q + " -> " + x.r)).join("\n");
+  const res = await soporteIA(env, {
+    model: MODELO_OJO,
+    messages: [{ role: "system", content: ORDEN_AYUDA + "\n\nHECHOS:\n" + hechos }].concat(plat),
+    response_format: { type: "json_object" },
+    max_completion_tokens: 500
+  }, 25);
+  let dicho = null;
+  if (res.ok) {
+    try {
+      const j = JSON.parse(res.texto);
+      const c = String(j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || "");
+      dicho = JSON.parse(c);
+    } catch (e) { dicho = null; }
+  }
+  if (!dicho || !String(dicho.respuesta || "").trim()) {
+    return { ok: true, tipo: "prospecto_charla", respuesta: wa ? "Perdón, se me trabó. ¿Me repites tu duda? O escríbenos por WhatsApp con el botón de abajo." : "Perdón, se me trabó. ¿Me repites tu duda?", whatsapp: !!wa };
+  }
+  const respuesta = String(dicho.respuesta).replace(/\*\*/g, "").replace(/^#+\s*/gm, "").trim().slice(0, 900);
+  reg.mensajes++;
+  for (const k of ["negocio", "colonia", "nombre", "telefono"]) { const v = L(dicho[k], 80); if (v) reg[k] = v; }
+  apunta("cliente", pregunta);
+  apunta("asistente", respuesta);
+  try { await ayudaLiga(env, reg, [pregunta]); } catch (e) {}
+  if (dicho.no_se === true) {
+    reg.necesita = reg.necesita || isoMX();
+    reg.historial[reg.historial.length - 1].no_se = true;
+    await ayudaAvisa(env, reg, pregunta);
+  }
+  await stripeGuarda(env, llave, reg);
+  return { ok: true, tipo: "prospecto_charla", respuesta };
+}
+/* Para /socio-ayuda. Pide LLAVE_ADMIN. */
+async function ayudaLista(env, clave, d) {
+  pideAdmin(env, d);
+  const vista = String(d && d.vista || "abiertas") === "resueltas" ? "resueltas" : "abiertas";
+  const llaves = [];
+  let cursor;
+  for (let v = 0; v < 5; v++) {
+    const l = await env.FOTOS.list({ prefix: "ayuda/", limit: 1000, cursor });
+    for (const o of l.objects || []) if (/^ayuda[/][a-z0-9]{8,24}[.]json$/.test(String(o.key))) llaves.push(o.key);
+    if (!l.truncated) break;
+    cursor = l.cursor;
+  }
+  const lista = [];
+  for (const k of llaves) {
+    const r = await stripeLee(env, k);
+    if (!r) continue;
+    const resuelta = r.estado === "resuelta";
+    if ((vista === "resueltas") !== resuelta) continue;
+    lista.push({ sesion: r.sesion, estado: r.estado || "abierta", necesita: r.necesita || "", fecha: r.fecha || "", ultima: r.ultima || "", resuelta: r.resuelta || "",
+      clave: r.clave || "", negocio_registrado: r.negocio_registrado || "", negocio: r.negocio || "", nombre: r.nombre || "", telefono: r.telefono || "",
+      colonia: r.colonia || "", posibles: r.posibles || [], historial: (r.historial || []).slice(-12) });
+  }
+  lista.sort((a, b) => ((a.necesita ? 1 : 0) !== (b.necesita ? 1 : 0) ? (b.necesita ? 1 : 0) - (a.necesita ? 1 : 0) : (a.ultima < b.ultima ? 1 : -1)));
+  return { ok: true, tipo: "ayuda_lista", vista, lista: lista.slice(0, vista === "resueltas" ? 40 : 200) };
+}
+async function ayudaResolver(env, clave, d) {
+  pideAdmin(env, d);
+  const ses = String(d && d.sesion || "").replace(/[^a-z0-9]/g, "").slice(0, 24);
+  const reg = ses ? await stripeLee(env, "ayuda/" + ses + ".json") : null;
+  if (!reg) throw new Error("no encontré esa plática");
+  if (d.abrir) { reg.estado = "abierta"; reg.reabierta = isoMX(); }
+  else { reg.estado = "resuelta"; reg.resuelta = isoMX(); reg.necesita = ""; }
+  const cl = String(d.clave || "").trim().toLowerCase();
+  if (cl && /^[a-z0-9][a-z0-9-]{1,39}$/.test(cl)) {
+    const cfg = await traerConfig(env, cl);
+    if (!cfg || String(cfg.clave || "").toLowerCase() !== cl) throw new Error("no existe el negocio " + cl);
+    reg.clave = cl; reg.negocio_registrado = String(nombreNegocio(cfg) || cfg.texto || cl).slice(0, 80); reg.ligado = isoMX();
+  }
+  await stripeGuarda(env, "ayuda/" + ses + ".json", reg);
+  return { ok: true, tipo: "ayuda_resolver", estado: reg.estado, clave: reg.clave || "" };
+}
+/* ===================== /LA AYUDA A CLIENTES ===================== */
 async function prospectoCharla(env, clave, d) {
+  /* (2.9.63-c) La ayuda del que ya compro va aparte: ayuda/<sesion>. */
+  if (String(d && d.tipo || "") === "ayuda") return await ayudaCharla(env, clave, d);
   const L = (x, n) => String(x == null ? "" : x).replace(/[<>&]/g, "").replace(/\s+/g, " ").trim().slice(0, n);
   const ses = String(d && d.sesion || "").replace(/[^a-z0-9]/g, "").slice(0, 24);
   if (ses.length < 8) throw new Error("recargue la página, por favor");
@@ -38426,7 +39176,7 @@ async function prospectoCharla(env, clave, d) {
     await avisaEdsiRed(env, "\u{1F525} <b>Interesado desde la página</b>\n" + quien + "\n\nPreguntó: " + reg.preguntas.slice(-5).join(" / ").replace(/[<>&]/g, "").slice(0, 600));
   }
   if (dicho.no_se === true) {
-    await avisaEdsiRed(env, (reg.tipo === "ayuda" ? "\u{1F198} <b>Un cliente con kit necesita ayuda</b> (lacartamenu.com/ayuda)\n" : "❓ <b>Un interesado preguntó algo que no sé</b>\n") + pregunta.replace(/[<>&]/g, "") + "\n\n" + quien +
+    await avisaEdsiRed(env, (reg.tipo === "ayuda" ? "\u{1F198} <b>Un cliente con kit necesita ayuda</b> (lacartamenu.com/ayuda)\nVer y resolver: " + ayudaLigaPanel() + "\n" : "❓ <b>Un interesado preguntó algo que no sé</b>\n") + pregunta.replace(/[<>&]/g, "") + "\n\n" + quien +
       "\n\nSi tiene WhatsApp o colonia, contáctalo. Si quieres que el bot lo sepa la próxima vez, contéstalo en el soporte.");
   }
   await stripeGuarda(env, llave, reg);
@@ -38602,6 +39352,10 @@ var ESCRITURAS = {
   kit_contado: kitContado,
   kit_envio: kitEnvio,
   prospecto_charla: prospectoCharla,
+  envios_pendientes: enviosPendientes,
+  envio_a_mano: envioAMano,
+  ayuda_lista: ayudaLista,
+  ayuda_resolver: ayudaResolver,
   kit_suscribir: kitSuscribir,
   kit_enganche: kitEnganche,
   kit_mensual: kitMensual,
@@ -38964,7 +39718,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.62";  // version: "2.9.62"
+var VERSION_BETO = "2.9.63";  // version: "2.9.63"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -40345,6 +41099,147 @@ h1{font-size:26px;line-height:1.18;margin:24px 0 10px;font-weight:900}
 
 /* Iconos de cada linea de La Carta (video/logos). Hoy las pantallas usan el del C1. */
 var LOGOS_LINEA = {"c1":"<svg class=\"logo\" aria-hidden=\"true\" style=\"width:44px;height:44px;flex:none;border-radius:10px\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#0e1113\"/><g transform=\"translate(200,200) scale(1.05) translate(-180,-163)\"><g stroke-linecap=\"round\"><rect x=\"68\" y=\"112\" width=\"8\" height=\"48\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"2\"/><rect x=\"284\" y=\"112\" width=\"8\" height=\"48\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"2\"/><path d=\"M70,72 L97.5,72 L73.5,112 A17.8,11 0 0 1 38.0,112 Z\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"4.5\" stroke-linejoin=\"round\"/><path d=\"M97.5,72 L125,72 L109.0,112 A17.8,11 0 0 1 73.5,112 Z\" fill=\"#F7EFDF\" stroke=\"#1b1f22\" stroke-width=\"4.5\" stroke-linejoin=\"round\"/><path d=\"M125,72 L152.5,72 L144.5,112 A17.8,11 0 0 1 109.0,112 Z\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"4.5\" stroke-linejoin=\"round\"/><path d=\"M152.5,72 L180,72 L180.0,112 A17.8,11 0 0 1 144.5,112 Z\" fill=\"#F7EFDF\" stroke=\"#1b1f22\" stroke-width=\"4.5\" stroke-linejoin=\"round\"/><path d=\"M180,72 L207.5,72 L215.5,112 A17.8,11 0 0 1 180.0,112 Z\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"4.5\" stroke-linejoin=\"round\"/><path d=\"M207.5,72 L235,72 L251.0,112 A17.8,11 0 0 1 215.5,112 Z\" fill=\"#F7EFDF\" stroke=\"#1b1f22\" stroke-width=\"4.5\" stroke-linejoin=\"round\"/><path d=\"M235,72 L262.5,72 L286.5,112 A17.8,11 0 0 1 251.0,112 Z\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"4.5\" stroke-linejoin=\"round\"/><path d=\"M262.5,72 L290,72 L322.0,112 A17.8,11 0 0 1 286.5,112 Z\" fill=\"#F7EFDF\" stroke=\"#1b1f22\" stroke-width=\"4.5\" stroke-linejoin=\"round\"/><rect x=\"62\" y=\"64\" width=\"236\" height=\"11\" rx=\"5.5\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"3\"/><path d=\"M162,122 V132 M198,122 V132\" stroke=\"#1b1f22\" stroke-width=\"2.5\"/><rect x=\"146\" y=\"130\" width=\"68\" height=\"22\" rx=\"5\" fill=\"#F7EFDF\" stroke=\"#1b1f22\" stroke-width=\"4\"/><path d=\"M167.25 147.50L164.19 147.50L164.19 144.03Q164.19 143.38 164.24 142.71Q164.28 142.03 164.34 141.56Q164.40 141.10 164.41 140.98L164.41 140.98L164.35 140.98L162.58 147.50L160.15 147.50L158.36 140.99L158.31 140.99Q158.32 141.12 158.38 141.57Q158.45 142.03 158.50 142.71Q158.56 143.38 158.56 144.03L158.56 144.03L158.56 147.50L155.72 147.50L155.72 137.87L160.08 137.87L161.54 143.43L161.60 143.43L163.04 137.87L167.25 137.87L167.25 147.50ZM170.33 147.50L170.33 137.87L178.66 137.87L178.66 140.18L173.42 140.18L173.42 141.51L177.90 141.51L177.90 143.72L173.42 143.72L173.42 145.19L178.76 145.19L178.76 147.50L170.33 147.50ZM191.23 147.50L188.52 147.50L184.48 142.82L184.48 147.50L181.64 147.50L181.64 137.87L184.34 137.87L188.38 142.61L188.38 137.87L191.23 137.87L191.23 147.50ZM199.73 136.97L197.94 136.97L199.24 135.11L201.93 135.11L201.96 135.17L199.73 136.97ZM204.09 143.62Q204.09 145.60 202.84 146.63Q201.60 147.67 199.30 147.67L199.30 147.67Q197.00 147.67 195.75 146.63Q194.50 145.60 194.50 143.62L194.50 143.62L194.50 137.87L197.59 137.87L197.59 143.58Q197.59 144.39 198.03 144.88Q198.46 145.36 199.29 145.36L199.29 145.36Q200.11 145.36 200.55 144.87Q200.99 144.38 200.99 143.58L200.99 143.58L200.99 137.87L204.09 137.87L204.09 143.62Z\" fill=\"#EE8A2E\"/><rect x=\"40\" y=\"160\" width=\"280\" height=\"76\" rx=\"14\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"6\"/><rect x=\"30\" y=\"152\" width=\"300\" height=\"14\" rx=\"7\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"3\"/><rect x=\"58\" y=\"210\" width=\"84\" height=\"6\" rx=\"3\" fill=\"#EE8A2E\"/><rect x=\"218\" y=\"210\" width=\"84\" height=\"6\" rx=\"3\" fill=\"#EE8A2E\"/><rect x=\"154\" y=\"170\" width=\"52\" height=\"52\" rx=\"4\" fill=\"#ffffff\" stroke=\"#1b1f22\" stroke-width=\"3.5\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M159,175h14v14h-14z M162,178v8h8v-8z\"/><rect x=\"164.5\" y=\"180.5\" width=\"3\" height=\"3\" fill=\"#1b1f22\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M187,175h14v14h-14z M190,178v8h8v-8z\"/><rect x=\"192.5\" y=\"180.5\" width=\"3\" height=\"3\" fill=\"#1b1f22\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M159,203h14v14h-14z M162,206v8h8v-8z\"/><rect x=\"164.5\" y=\"208.5\" width=\"3\" height=\"3\" fill=\"#1b1f22\"/><g fill=\"#1b1f22\"><rect x=\"178\" y=\"176\" width=\"4\" height=\"4\"/><rect x=\"182\" y=\"180\" width=\"4\" height=\"4\"/><rect x=\"178\" y=\"184\" width=\"4\" height=\"4\"/><rect x=\"174\" y=\"190\" width=\"4\" height=\"4\"/><rect x=\"182\" y=\"192\" width=\"4\" height=\"4\"/><rect x=\"188\" y=\"190\" width=\"4\" height=\"4\"/><rect x=\"178\" y=\"198\" width=\"4\" height=\"4\"/><rect x=\"186\" y=\"198\" width=\"4\" height=\"4\"/><rect x=\"192\" y=\"202\" width=\"4\" height=\"4\"/><rect x=\"182\" y=\"204\" width=\"4\" height=\"4\"/><rect x=\"190\" y=\"208\" width=\"4\" height=\"4\"/><rect x=\"178\" y=\"210\" width=\"4\" height=\"4\"/><rect x=\"186\" y=\"214\" width=\"4\" height=\"4\"/><rect x=\"194\" y=\"212\" width=\"4\" height=\"4\"/><rect x=\"174\" y=\"204\" width=\"4\" height=\"4\"/></g><circle cx=\"96\" cy=\"240\" r=\"22\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"4.5\"/><circle cx=\"96\" cy=\"240\" r=\"9.5\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"2.5\"/><circle cx=\"96\" cy=\"240\" r=\"3\" fill=\"#1b1f22\"/><circle cx=\"264\" cy=\"240\" r=\"22\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"4.5\"/><circle cx=\"264\" cy=\"240\" r=\"9.5\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"2.5\"/><circle cx=\"264\" cy=\"240\" r=\"3\" fill=\"#1b1f22\"/></g></g></svg>","restaurante":"<svg class=\"logo\" aria-hidden=\"true\" style=\"width:44px;height:44px;flex:none;border-radius:10px\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#0e1113\"/><g transform=\"translate(200,196) scale(1.12) translate(-180,-171)\"><g stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M50,258 V186 M80,258 V186\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"12\"/><path d=\"M50,258 V186 M80,258 V186\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"5\"/><path d=\"M50,184 V116 Q50,104 62,104 H68 Q80,104 80,116 V184\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"12\"/><path d=\"M50,184 V116 Q50,104 62,104 H68 Q80,104 80,116 V184\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"5\"/><path d=\"M60,112 V180 M70,112 V180\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"11\"/><path d=\"M60,112 V180 M70,112 V180\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4\"/><rect x=\"44\" y=\"176\" width=\"42\" height=\"11\" rx=\"5\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3.5\"/><path d=\"M310,258 V186 M280,258 V186\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"12\"/><path d=\"M310,258 V186 M280,258 V186\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"5\"/><path d=\"M310,184 V116 Q310,104 298,104 H292 Q280,104 280,116 V184\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"12\"/><path d=\"M310,184 V116 Q310,104 298,104 H292 Q280,104 280,116 V184\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"5\"/><path d=\"M300,112 V180 M290,112 V180\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"11\"/><path d=\"M300,112 V180 M290,112 V180\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4\"/><rect x=\"274\" y=\"176\" width=\"42\" height=\"11\" rx=\"5\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3.5\"/><path d=\"M84,150 L78,246 Q92.6,258 107.1,246 Q121.7,258 136.3,246 Q150.9,258 165.4,246 Q180.0,258 194.6,246 Q209.1,258 223.7,246 Q238.3,258 252.9,246 Q267.4,258 282.0,246 L276,150 Z\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"6\"/><path d=\"M120,172 Q117,210 114,244 M160,174 Q159,212 158,248 M200,174 Q201,212 202,248 M240,172 Q243,210 246,244\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"2.5\"/><ellipse cx=\"180\" cy=\"150\" rx=\"96\" ry=\"22\" fill=\"#F7EFDF\" stroke=\"#1b1f22\" stroke-width=\"5.5\"/><path d=\"M180,120 L170,100 M180,120 V92 M180,120 L191,101\" stroke=\"#1b1f22\" stroke-width=\"3\" fill=\"none\"/><g fill=\"#ffffff\" stroke=\"#1b1f22\" stroke-width=\"3.5\"><circle cx=\"168\" cy=\"98\" r=\"8\"/><circle cx=\"180\" cy=\"88\" r=\"8.5\"/><circle cx=\"193\" cy=\"98\" r=\"8\"/></g><g fill=\"#EE8A2E\"><circle cx=\"168\" cy=\"98\" r=\"3\"/><circle cx=\"180\" cy=\"88\" r=\"3.2\"/><circle cx=\"193\" cy=\"98\" r=\"3\"/></g><path d=\"M172,152 Q164,134 172,120 H188 Q196,134 188,152 Z\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"4\"/><rect x=\"134\" y=\"128\" width=\"12\" height=\"24\" rx=\"3\" fill=\"#ffffff\" stroke=\"#1b1f22\" stroke-width=\"3.5\"/><path d=\"M140,124 Q133,116 140,106 Q147,116 140,124 Z\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"2.5\"/><path d=\"M206,152 L210,106 H246 L250,152 Z\" fill=\"#ffffff\" stroke=\"#1b1f22\" stroke-width=\"3.5\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M214,112h10v10h-10z M216.2,114.2v5.6h5.6v-5.6z\"/><rect x=\"217.8\" y=\"115.8\" width=\"2.4\" height=\"2.4\" fill=\"#1b1f22\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M232,112h10v10h-10z M234.2,114.2v5.6h5.6v-5.6z\"/><rect x=\"235.8\" y=\"115.8\" width=\"2.4\" height=\"2.4\" fill=\"#1b1f22\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M214,130h10v10h-10z M216.2,132.2v5.6h5.6v-5.6z\"/><rect x=\"217.8\" y=\"133.8\" width=\"2.4\" height=\"2.4\" fill=\"#1b1f22\"/><g fill=\"#1b1f22\"><rect x=\"233\" y=\"131\" width=\"3\" height=\"3\"/><rect x=\"238\" y=\"135\" width=\"3\" height=\"3\"/><rect x=\"233\" y=\"138\" width=\"3\" height=\"3\"/><rect x=\"227\" y=\"125\" width=\"3\" height=\"3\"/><rect x=\"241\" y=\"141\" width=\"3\" height=\"3\"/></g></g></g></svg>","botanero":"<svg class=\"logo\" aria-hidden=\"true\" style=\"width:44px;height:44px;flex:none;border-radius:10px\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#0e1113\"/><g transform=\"translate(200,200) scale(1.22) translate(-175,-162)\"><g stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M230,142 H246 Q266,142 266,162 V204 Q266,224 246,224 H230\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"24\"/><path d=\"M230,142 H246 Q266,142 266,162 V204 Q266,224 246,224 H230\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"12\"/><rect x=\"100\" y=\"112\" width=\"130\" height=\"146\" rx=\"14\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"6\"/><rect x=\"114\" y=\"128\" width=\"102\" height=\"116\" rx=\"8\" fill=\"#F4AE3F\" stroke=\"#1b1f22\" stroke-width=\"3\"/><path d=\"M126,150 V230\" stroke=\"#ffffff\" stroke-width=\"6\" fill=\"none\"/><g fill=\"#ffffff\" stroke=\"#1b1f22\" stroke-width=\"2\"><circle cx=\"150\" cy=\"214\" r=\"4\"/><circle cx=\"170\" cy=\"196\" r=\"3.2\"/><circle cx=\"196\" cy=\"222\" r=\"4.5\"/><circle cx=\"186\" cy=\"178\" r=\"3\"/><circle cx=\"204\" cy=\"196\" r=\"3\"/></g><path d=\"M92,122 Q86,98 110,94 Q114,72 140,76 Q158,58 180,70 Q202,58 220,78 Q244,78 242,102 Q248,122 234,128 V140 Q234,150 225,150 Q216,150 216,140 V132 H160 V148 Q160,157 151,157 Q142,157 142,148 V132 H102 Q92,132 92,122 Z\" fill=\"#F7EFDF\" stroke=\"#1b1f22\" stroke-width=\"5\"/><rect x=\"157\" y=\"86\" width=\"44\" height=\"44\" rx=\"4\" fill=\"#ffffff\" stroke=\"#1b1f22\" stroke-width=\"3\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M161,90h12v12h-12z M163.6,92.6v6.8h6.8v-6.8z\"/><rect x=\"165.6\" y=\"94.6\" width=\"2.8\" height=\"2.8\" fill=\"#1b1f22\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M185,90h12v12h-12z M187.6,92.6v6.8h6.8v-6.8z\"/><rect x=\"189.6\" y=\"94.6\" width=\"2.8\" height=\"2.8\" fill=\"#1b1f22\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M161,114h12v12h-12z M163.6,116.6v6.8h6.8v-6.8z\"/><rect x=\"165.6\" y=\"118.6\" width=\"2.8\" height=\"2.8\" fill=\"#1b1f22\"/><g fill=\"#1b1f22\"><rect x=\"176\" y=\"90\" width=\"3.6\" height=\"3.6\"/><rect x=\"180\" y=\"94\" width=\"3.6\" height=\"3.6\"/><rect x=\"176\" y=\"98\" width=\"3.6\" height=\"3.6\"/><rect x=\"173\" y=\"104\" width=\"3.6\" height=\"3.6\"/><rect x=\"180\" y=\"105\" width=\"3.6\" height=\"3.6\"/><rect x=\"185\" y=\"103\" width=\"3.6\" height=\"3.6\"/><rect x=\"176\" y=\"110\" width=\"3.6\" height=\"3.6\"/><rect x=\"183\" y=\"110\" width=\"3.6\" height=\"3.6\"/><rect x=\"189\" y=\"113\" width=\"3.6\" height=\"3.6\"/><rect x=\"180\" y=\"116\" width=\"3.6\" height=\"3.6\"/><rect x=\"187\" y=\"119\" width=\"3.6\" height=\"3.6\"/><rect x=\"176\" y=\"120\" width=\"3.6\" height=\"3.6\"/><rect x=\"184\" y=\"123\" width=\"3.6\" height=\"3.6\"/><rect x=\"191\" y=\"122\" width=\"3.6\" height=\"3.6\"/></g></g></g></svg>","eventos":"<svg class=\"logo\" aria-hidden=\"true\" style=\"width:44px;height:44px;flex:none;border-radius:10px\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 400\"><rect width=\"400\" height=\"400\" fill=\"#0e1113\"/><g transform=\"translate(200,200) scale(1.16) translate(-180,-160)\"><g stroke-linecap=\"round\" stroke-linejoin=\"round\"><g transform=\"translate(144.8,104.7) scale(0.6288098270668724)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g><g transform=\"translate(215.2,104.7) scale(0.6288098270668724)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g><g transform=\"translate(272.2,125.1) scale(0.6941986545873549)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g><g transform=\"translate(87.8,125.1) scale(0.6941986545873549)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g><g transform=\"translate(294.0,158.0) scale(0.8)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g><g transform=\"translate(66.0,158.0) scale(0.8)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g><path d=\"M100,150 L94,214 Q104.8,224 115.5,214 Q126.3,224 137.0,214 Q147.8,224 158.5,214 Q169.3,224 180.0,214 Q190.8,224 201.5,214 Q212.3,224 223.0,214 Q233.8,224 244.5,214 Q255.3,224 266.0,214 L260,150 Z\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"5.5\"/><path d=\"M128,170 Q126,192 124,210 M158,174 Q157,194 156,214 M202,174 Q203,194 204,214 M232,170 Q234,192 236,210\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"2.2\"/><ellipse cx=\"180\" cy=\"150\" rx=\"80\" ry=\"28\" fill=\"#F7EFDF\" stroke=\"#1b1f22\" stroke-width=\"5\"/><g fill=\"#6FA05A\" stroke=\"#1b1f22\" stroke-width=\"2\"><ellipse cx=\"167\" cy=\"146\" rx=\"6\" ry=\"2.8\" transform=\"rotate(-15 167 146)\"/><ellipse cx=\"193\" cy=\"146\" rx=\"6\" ry=\"2.8\" transform=\"rotate(15 193 146)\"/></g><g stroke=\"#1b1f22\" stroke-width=\"2.2\"><circle cx=\"172.5\" cy=\"141\" r=\"4.6\" fill=\"#EE8A2E\"/><circle cx=\"187.5\" cy=\"141\" r=\"4.6\" fill=\"#EE8A2E\"/><circle cx=\"180\" cy=\"138.5\" r=\"5\" fill=\"#ffffff\"/></g><path d=\"M169,146 H191 Q190,154 180,154 Q170,154 169,146 Z\" fill=\"#EDE3CF\" stroke=\"#1b1f22\" stroke-width=\"2.5\"/><path d=\"M205,158 L207,136 H225 L227,158 Z\" fill=\"#ffffff\" stroke=\"#1b1f22\" stroke-width=\"2.5\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M209,139h6v6h-6z M210.4,140.4v3.2h3.2v-3.2z\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M217.5,139h6v6h-6z M218.9,140.4v3.2h3.2v-3.2z\"/><path fill=\"#1b1f22\" fill-rule=\"evenodd\" d=\"M209,147.5h6v6h-6z M210.4,148.9v3.2h3.2v-3.2z\"/><g fill=\"#1b1f22\"><rect x=\"218\" y=\"148\" width=\"2.2\" height=\"2.2\"/><rect x=\"221.5\" y=\"151\" width=\"2.2\" height=\"2.2\"/><rect x=\"218\" y=\"152.5\" width=\"2.2\" height=\"2.2\"/></g><g transform=\"translate(272.2,190.9) scale(0.9058013454126452)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g><g transform=\"translate(87.8,190.9) scale(0.9058013454126452)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g><g transform=\"translate(215.2,211.3) scale(0.9711901729331277)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g><g transform=\"translate(144.8,211.3) scale(0.9711901729331277)\"><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,2 V30 M11,2 V30\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"10.5\"/><path d=\"M-11,0 V-34 Q-11,-44 -2,-44 H2 Q11,-44 11,-34 V0\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"4.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#1b1f22\" stroke-width=\"9.5\"/><path d=\"M-4,-38 V-4 M4,-38 V-4\" fill=\"none\" stroke=\"#EE8A2E\" stroke-width=\"3.5\"/><rect x=\"-15\" y=\"-4\" width=\"30\" height=\"8\" rx=\"4\" fill=\"#EE8A2E\" stroke=\"#1b1f22\" stroke-width=\"3\"/></g></g></g></svg>"};
+
+var HTML_SOCIO_AYUDA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Ayuda a clientes &middot; La Carta</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:#0e1113;color:#f2f4f6;font-family:-apple-system,system-ui,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+.tapa{max-width:560px;margin:0 auto;padding:22px 16px 60px}
+.marca{font-size:19px;font-weight:900;letter-spacing:2.6px}
+.marca small{display:block;font-size:10.5px;font-weight:800;letter-spacing:2px;color:#8b959e;margin-top:2px}
+h1{font-size:25px;margin:18px 0 14px;font-weight:900}
+.caja{background:#1b2126;border:1px solid #2b333a;border-radius:14px;padding:14px 15px;margin-bottom:12px}
+.caja.urge{border-color:#e0a14a}
+.t{display:block;font-size:16px;font-weight:800;margin-bottom:4px}
+.ay{font-size:13.5px;color:#98a2ab;margin:2px 0 8px;line-height:1.45}
+input{width:100%;padding:12px;border-radius:10px;border:1px solid #2f3a41;background:#0e1113;color:#f2f4f6;font-size:16px;margin:6px 0}
+.btn{display:inline-block;padding:11px 14px;border-radius:10px;border:0;background:#8fd6ac;color:#0e1113;font-weight:900;font-size:14.5px;cursor:pointer;margin-top:6px}
+.btn.gris{background:#2b333a;color:#f2f4f6}
+.tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.tabs button{flex:1;min-width:30%;padding:10px 6px;border-radius:10px;border:1px solid #2b333a;background:#151a1e;color:#c2cad1;font-weight:800;font-size:13.5px}
+.tabs button.sel{background:#8fd6ac;color:#0e1113;border-color:#8fd6ac}
+.msg{font-size:14px;color:#e0a14a;margin-top:8px;min-height:1px}
+.chip{display:inline-block;font-size:11.5px;font-weight:800;padding:3px 8px;border-radius:20px;background:#3a2c17;color:#f0c27a;margin-left:6px;vertical-align:middle}
+.plat{margin:10px 0 4px;border-top:1px solid #2b333a;padding-top:8px}
+.m{font-size:14px;line-height:1.45;margin:0 0 6px;white-space:pre-wrap;word-break:break-word}
+.m b{font-size:11.5px;letter-spacing:1px;color:#8b959e;display:block}
+.m.nose{color:#f0c27a}
+.vacio{color:#98a2ab;text-align:center;padding:30px 10px;font-size:15px}
+</style></head><body><div class="tapa">
+<div class="marca">LA CARTA<small>SOLO PARA EDSI</small></div>
+<h1>Ayuda a clientes</h1>
+<div id="puerta" class="caja">
+  <b class="t">Llave de administrador</b>
+  <p class="ay">La misma de /socio. No la escribas en la direcci&oacute;n.</p>
+  <input id="llave" type="password" autocomplete="off">
+  <button class="btn" id="bEntrar">Entrar</button>
+  <div class="msg" id="msg"></div>
+</div>
+<div id="todo" style="display:none">
+  <div class="tabs">
+    <button data-v="abiertas" class="sel">Abiertas</button>
+    <button data-v="resueltas">Resueltas</button>
+    <button data-v="cajas">Cajas sin gu&iacute;a</button>
+  </div>
+  <div class="msg" id="msg2"></div>
+  <div id="lista"></div>
+</div>
+</div>
+<script>
+(function(){
+  var LLAVE = "", VISTA = "abiertas";
+  function $(i){ return document.getElementById(i); }
+  function el(tag, cls, txt){ var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+  function pide(tipo, datos){
+    datos.admin = LLAVE;
+    return fetch("/beto-guarda", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ c: "socio", tipo: tipo, datos: datos }) }).then(function(r){ return r.json(); });
+  }
+  function hora(iso){ return String(iso || "").slice(0, 16).replace("T", " "); }
+  function boton(txt, gris, fn){ var b = el("button", "btn" + (gris ? " gris" : ""), txt); b.onclick = fn; return b; }
+  function tarjetaAyuda(p){
+    var c = el("div", "caja" + (p.necesita ? " urge" : ""));
+    var t = el("b", "t", p.negocio_registrado || p.negocio || "(no ha dicho su negocio)");
+    if (p.necesita) t.appendChild(el("span", "chip", "Necesita una persona"));
+    c.appendChild(t);
+    var datos = [];
+    datos.push(p.clave ? p.clave + ".lacartamenu.com" : "sin clave todavía");
+    if (p.nombre) datos.push(p.nombre);
+    if (p.telefono) datos.push("Tel " + p.telefono);
+    if (p.colonia) datos.push(p.colonia);
+    c.appendChild(el("p", "ay", datos.join(" · ")));
+    if (!p.clave && p.posibles && p.posibles.length) c.appendChild(el("p", "ay", "¿Será alguno de estos? " + p.posibles.join(", ")));
+    c.appendChild(el("p", "ay", "Último mensaje: " + hora(p.ultima)));
+    var pl = el("div", "plat");
+    (p.historial || []).forEach(function(h){
+      var m = el("p", "m" + (h.no_se ? " nose" : ""));
+      m.appendChild(el("b", "", h.de === "cliente" ? "CLIENTE" : (h.no_se ? "ASISTENTE (NO SUPO)" : "ASISTENTE")));
+      m.appendChild(document.createTextNode(h.t || ""));
+      pl.appendChild(m);
+    });
+    c.appendChild(pl);
+    if (!p.clave) {
+      var inp = el("input"); inp.placeholder = "Ligar a una clave (ej. buentaco)"; inp.autocomplete = "off";
+      c.appendChild(inp);
+      c.appendChild(boton("Ligar a su negocio", true, function(){
+        var v = inp.value.trim().toLowerCase(); if (!v) return;
+        pide("ayuda_resolver", { sesion: p.sesion, clave: v, abrir: 1 }).then(function(r){ if (!r.ok) { di(r.error || "No se pudo."); return; } carga(); });
+      }));
+      c.appendChild(document.createTextNode(" "));
+    }
+    if (p.estado === "resuelta") c.appendChild(boton("Volver a abrir", true, function(){ pide("ayuda_resolver", { sesion: p.sesion, abrir: 1 }).then(function(r){ if (!r.ok) di(r.error || "No se pudo."); carga(); }); }));
+    else c.appendChild(boton("Marcar resuelta", false, function(){ pide("ayuda_resolver", { sesion: p.sesion }).then(function(r){ if (!r.ok) di(r.error || "No se pudo."); carga(); }); }));
+    return c;
+  }
+  function tarjetaCaja(x){
+    var c = el("div", "caja");
+    c.appendChild(el("b", "t", x.recibe + " · " + x.ciudad + ", " + x.estado));
+    c.appendChild(el("p", "ay", (x.modo === "sucursal" ? "PuntoPost" : "A domicilio") + " · CP " + x.cp + " · Tel " + x.telefono + " · pagó " + hora(x.pagado)));
+    c.appendChild(el("p", "ay", "Por qué no tiene guía: " + x.motivo));
+    var a = el("a", "", "Su página"); a.href = x.liga; a.target = "_blank"; a.style.color = "#8fd6ac";
+    c.appendChild(a);
+    var g = el("input"); g.placeholder = "Número de guía (si la hiciste a mano)"; g.autocomplete = "off";
+    var q = el("input"); q.placeholder = "Paquetería (ej. Estafeta)"; q.autocomplete = "off";
+    c.appendChild(g); c.appendChild(q);
+    c.appendChild(boton("La mandé a mano", false, function(){
+      pide("envio_a_mano", { id: x.id, guia: g.value.trim(), paqueteria: q.value.trim() }).then(function(r){ if (!r.ok) { di(r.error || "No se pudo."); return; } carga(); });
+    }));
+    return c;
+  }
+  function di(t){ $("msg2").textContent = t || ""; }
+  function carga(){
+    di("");
+    var L = $("lista"); L.innerHTML = ""; L.appendChild(el("p", "vacio", "Cargando..."));
+    var tipo = VISTA === "cajas" ? "envios_pendientes" : "ayuda_lista";
+    pide(tipo, { vista: VISTA }).then(function(r){
+      L.innerHTML = "";
+      if (!r || !r.ok) { di((r && r.error) || "No se pudo cargar."); return; }
+      if (!r.lista.length) { L.appendChild(el("p", "vacio", VISTA === "cajas" ? "No hay cajas pagadas sin guía." : VISTA === "abiertas" ? "No hay pláticas abiertas." : "No hay pláticas resueltas.")); return; }
+      r.lista.forEach(function(x){ L.appendChild(VISTA === "cajas" ? tarjetaCaja(x) : tarjetaAyuda(x)); });
+    }).catch(function(){ L.innerHTML = ""; di("No se pudo conectar."); });
+  }
+  $("bEntrar").onclick = function(){
+    var v = $("llave").value.trim();
+    if (!v) { $("msg").textContent = "Escribe la llave."; return; }
+    LLAVE = v;
+    pide("ayuda_lista", { vista: "abiertas" }).then(function(r){
+      if (!r || !r.ok) { LLAVE = ""; $("msg").textContent = (r && r.error) || "No se pudo abrir."; return; }
+      $("puerta").style.display = "none"; $("todo").style.display = "block"; carga();
+    }).catch(function(){ $("msg").textContent = "No se pudo conectar."; });
+  };
+  $("llave").addEventListener("keydown", function(e){ if (e.key === "Enter") $("bEntrar").click(); });
+  Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function(b){
+    b.onclick = function(){
+      Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function(x){ x.classList.remove("sel"); });
+      b.classList.add("sel"); VISTA = b.getAttribute("data-v"); carga();
+    };
+  });
+})();
+</script>
+</body></html>`;
 
 var HTML_COMPRA = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -42498,8 +43393,65 @@ function ligaNegocio(origen, camino, clave, extra) {
 }
 __name(ligaNegocio, "ligaNegocio");
 
+/* EL OBJETO EN VIVO: uno por negocio (idFromName(clave)). Guarda los
+   WebSockets de las pantallas con la API de hibernacion y les reparte el aviso
+   corto {tipo:"pedido", id}. No guarda nada en su almacen: no hay datos del
+   negocio aqui adentro. */
+var CocinaVivo = class {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    try {
+      state.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
+    } catch (e) {
+    }
+  }
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === "/avisa" && request.method === "POST") {
+      let b = {};
+      try { b = await request.json(); } catch (e) {}
+      const ids = Array.isArray(b && b.ids) ? b.ids : [];
+      const msg = JSON.stringify({ tipo: "pedido", id: Number(ids[0]) || 0 });
+      let n = 0;
+      for (const ws of this.state.getWebSockets()) {
+        try { ws.send(msg); n++; } catch (e) {}
+      }
+      return new Response(JSON.stringify({ ok: true, pantallas: n }), { headers: { "content-type": "application/json" } });
+    }
+    if (String(request.headers.get("upgrade") || "").toLowerCase() === "websocket") {
+      const ya = this.state.getWebSockets();
+      /* Tope de pantallas por negocio: si alguien deja cuarenta pestanas
+         abiertas, se cierra la mas vieja (esa vuelve a su sondeo). */
+      if (ya.length >= VIVO_TOPE) {
+        try { ya[0].close(1013, "muchas pantallas"); } catch (e) {}
+      }
+      const par = new WebSocketPair();
+      const cliente = par[0], servidor = par[1];
+      this.state.acceptWebSocket(servidor);
+      return new Response(null, { status: 101, webSocket: cliente });
+    }
+    return new Response("no", { status: 404 });
+  }
+  async webSocketMessage(ws, msg) {
+    if (msg === "ping") {
+      try { ws.send("pong"); } catch (e) {}
+    }
+  }
+  async webSocketClose(ws, code, reason, limpio) {
+    try { ws.close(1000, "adios"); } catch (e) {}
+  }
+  async webSocketError(ws, err) {
+    try { ws.close(1011, "error"); } catch (e) {}
+  }
+};
+__name(CocinaVivo, "CocinaVivo");
+
 var worker_beto_todo_default = {
   async scheduled(evento, env, ctx) {
+    /* (2.9.63-b) Un cron mas seguido solo revisa el rastreo de las cajas. */
+    if (cronSoloRastreo(evento)) { ctx.waitUntil(enviosRevisa(env, false).catch(() => {})); return; }
+    ctx.waitUntil(enviosRevisa(env, true).catch(() => {}));
     ctx.waitUntil(revisarSuscripciones(env, false).catch(() => {}));
     ctx.waitUntil(cobroRenuevaTodos(env).catch(() => {}));
     ctx.waitUntil(d1ReporteDiario(env).catch(() => {}));
@@ -42692,6 +43644,40 @@ await chatAvisar(env, cfg,
         }
       });
     }
+    /* LA COCINA EN VIVO (2.9.63-vivo). El pase se pide con lo mismo que
+       ya usa la pantalla para leer pedidos (llave y sello, o NIP), y se
+       revisa con puedePasar(), igual que /beto-lee. */
+    if (ruta === "/vivo-pase") {
+      if (request.method !== "POST") return json({ ok: false, error: "solo POST" }, 405);
+      if (!vivoHay(env) || !vivoSecreto(env)) return json({ ok: false, sin_vivo: true });
+      const b = await leerCuerpo(request);
+      const clave = String(b.c || b.clave || q.get("c") || "").trim();
+      if (!clave) return json({ ok: false, error: "falta el negocio" }, 400);
+      try {
+        if (await negocioPausado(env, clave)) return json({ ok: false, error: "negocio en pausa" }, 403);
+        const paso = await puedePasar(env, clave, b.p || "", b.s || "", b.pin || "");
+        if (!paso.ok) return json({ ok: false, sin_llave: true, motivo: paso.motivo }, 403);
+      } catch (e) {
+        return json({ ok: false, error: "no se pudo revisar" }, 502);
+      }
+      return json({ ok: true, t: await vivoPase(env, clave) });
+    }
+    if (ruta === "/vivo") {
+      if (!vivoHay(env)) return new Response("sin vivo", { status: 404 });
+      if (String(request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+        return new Response("esta direccion es para las pantallas en vivo", { status: 426 });
+      }
+      const clave = vivoClave(q.get("c"));
+      if (!clave || !(await vivoPaseBueno(env, clave, q.get("t") || ""))) {
+        return new Response("pase vencido", { status: 403 });
+      }
+      try {
+        const stub = env.COCINA_VIVO.get(env.COCINA_VIVO.idFromName(clave));
+        return await stub.fetch(request);
+      } catch (e) {
+        return new Response("no se pudo abrir", { status: 502 });
+      }
+    }
     if (ruta === "/cocina") {
       return new Response(HTML_COCINA, {
         status: 200,
@@ -42759,6 +43745,12 @@ await chatAvisar(env, cfg,
       return new Response(HTML_ALTA, {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
+      });
+    }
+    if (ruta === "/socio-ayuda") {
+      return new Response(HTML_SOCIO_AYUDA, {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" }
       });
     }
     if (ruta === "/socio") {
@@ -44912,6 +45904,7 @@ await chatAvisar(env, cfg,
   }
 };
 export {
+  CocinaVivo,
   worker_beto_todo_default as default
 };
 //# sourceMappingURL=worker_beto_todo.js.map
