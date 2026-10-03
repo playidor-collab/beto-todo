@@ -1228,6 +1228,17 @@ button:active{transform:translateY(2px)}
 </style>
 </head>
 <body>
+<style>
+/* (2.9.58) En el celular la barra va en dos renglones: arriba el nombre y la
+   cuenta, abajo los botones. Antes se salia de la pantalla. */
+.saltoBarra{display:none}
+@media(max-width:640px){
+  header{flex-wrap:wrap;gap:8px 10px;padding-left:12px;padding-right:12px}
+  header h1{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
+  .saltoBarra{display:block;flex:0 0 100%;height:0;order:5}
+  header .oido,header .impre{order:6;flex:1 1 auto;min-width:0;font-size:12.5px;padding:7px 9px;min-height:36px;white-space:normal}
+}
+</style>
 <header>
 <a class="volver oculto" id="volver" href="#">&#8249; Volver</a>
 <div class="pulso" id="pulso"></div>
@@ -1245,10 +1256,11 @@ if (PARA_MESERO) {
   document.title = "Pedidos del mesero";
 }
 <\/script>
+<div class="saltoBarra"></div>
 <button class="oido oculto" id="bImpre" title="Que las comandas salgan solas en la impresora">&#128424; Conectar impresora</button>
 <button class="oido oculto" id="bSolo" title="Que el papel salga solo, o solo cuando tú lo pidas">&#128196; El papel sale solo</button>
 <button class="oido" id="bOido" title="Avisarme cuando entre un pedido">&#128266; Prender el aviso</button>
-<div class="cuenta cero" id="cuenta">0</div>
+<div class="cuenta cero" id="cuenta" style="order:4">0</div>
 </header>
 <div id="err"></div>
 <div id="avisoPapel" class="papelOff oculto">El papel <b>NO</b> sale solo. Toca &#128424; en la comanda que quieras imprimir.</div>
@@ -2169,6 +2181,12 @@ article.mesa .unped{border-top:1px solid var(--linea);padding-top:9px;margin-top
 article.mesa .unped .lin{border-top:0;padding-top:0}
 article.mesa .unpedT{font-size:12px;opacity:.6;margin-bottom:4px;font-weight:700}
 article.mesa .quitaAbre{margin-top:9px;font-size:13px;min-height:38px}
+/* (2.9.58) Cancelar es la salida chica: gris con borde rojo, no naranja como Cobrada. */
+article .quitaAbre,article.mesa button.quitaAbre{width:auto;align-self:center;background:transparent;color:#c98a8a;border:1px solid #5A3030;font-size:12.5px;font-weight:700;padding:7px 14px;min-height:34px;margin-top:4px}
+.solaTarj{background:#14301f;border:1px solid #2f6b47;color:#a8e8c4;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.45}
+.solaTarj b{color:#f2f4f6}
+.otraForma summary{cursor:pointer;color:var(--humo);font-size:13px;font-weight:700;padding:4px 0}
+.otraForma .dentro{display:flex;flex-direction:column;gap:9px;margin-top:8px}
 article.mesa .ren{display:flex;justify-content:space-between;gap:12px;font-size:15px}
 article.mesa .ren b{white-space:nowrap}
 article.mesa .nota{font-size:12.5px;color:var(--humo);margin:-1px 0 3px 2px}
@@ -2184,11 +2202,23 @@ article.mesa button.suave{background:var(--linea);color:var(--humo)}
 </style>
 </head>
 <body>
+<style>
+/* (2.9.58) En el celular la barra va en dos renglones: arriba el nombre y la
+   cuenta, abajo los botones. Antes se salia de la pantalla. */
+.saltoBarra{display:none}
+@media(max-width:640px){
+  header{flex-wrap:wrap;gap:8px 10px;padding-left:12px;padding-right:12px}
+  header h1{flex:1 1 0;min-width:0;overflow-wrap:anywhere}
+  .saltoBarra{display:block;flex:0 0 100%;height:0;order:5}
+  header .oido,header .impre{order:6;flex:1 1 auto;min-width:0;font-size:12.5px;padding:7px 9px;min-height:36px;white-space:normal}
+}
+</style>
 <header>
   <button class="volver oculto" id="volver">&#8249; Atr&aacute;s</button>
   <h1 id="titulo">Caja<small>Cuentas abiertas y pagos</small></h1>
+  <div class="saltoBarra"></div>
   <button class="impre" id="bImpre" style="display:none" title="Que las cuentas salgan solas en la impresora">&#128424; Conectar impresora</button>
-  <div class="cuenta cero" id="cuenta">0</div>
+  <div class="cuenta cero" id="cuenta" style="order:4">0</div>
 </header>
 <div id="err"></div>
 <main id="tablero"></main>
@@ -2737,8 +2767,8 @@ function pintar(filas, mesas){
   }
 
   var h = "";
-  if (deben.length) {
-    h += '<div class="aviso">&#9888;&#65039; Aprieta el boton HASTA que veas el dinero en TU cuenta. Una captura de pantalla se puede inventar; tu saldo no. En cuanto aprietes, sale la comanda a cocina.</div>';
+  if (deben.some(function(p){ return p.pago_metodo !== "tarjeta"; })) {
+    h += '<div class="aviso">&#9888;&#65039; Aprieta el bot&oacute;n HASTA que veas el dinero en TU cuenta. Una captura de pantalla se puede inventar; tu saldo no. En cuanto aprietes, sale la comanda a cocina.</div>';
   }
   deben.forEach(function(p){
     var via = p.pago_metodo === "liga" ? "Liga de pago" : p.pago_metodo === "tarjeta" ? "Tarjeta (se confirma sola)" : "Transferencia";
@@ -2757,11 +2787,19 @@ function pintar(filas, mesas){
       h += '<div class="dir">&#128663; ' + esc(p.direccion) +
            (p.referencia ? '<span> &middot; ' + esc(p.referencia) + '</span>' : '') + '</div>';
     }
-    h += '<div class="via">Pidio hace ' + minutos(p.createdAt) + ' min</div>';
-    h += cuadroCaptura(p.id);
-    h += '<input class="ref" id="r' + esc(p.id) + '" placeholder="Referencia del banco (opcional)" autocomplete="off"' +
-         (p.pago_ref ? ' value="' + esc(p.pago_ref) + '"' : '') + '>';
-    h += '<button data-id="' + esc(p.id) + '" data-via="' + esc(p.pago_metodo === "liga" ? "liga" : "transferencia") + '">Ya vi el dinero en mi cuenta</button>';
+    h += '<div class="via">Pidi&oacute; hace ' + minutos(p.createdAt) + ' min</div>';
+    var yaVi = '<input class="ref" id="r' + esc(p.id) + '" placeholder="Referencia del banco (opcional)" autocomplete="off"' +
+         (p.pago_ref ? ' value="' + esc(p.pago_ref) + '"' : '') + '>' +
+         '<button data-id="' + esc(p.id) + '" data-via="' + esc(p.pago_metodo === "liga" ? "liga" : "transferencia") + '">Ya vi el dinero en mi cuenta</button>';
+    /* (2.9.58) La tarjeta se confirma sola: no se pide captura ni revisar la
+       cuenta. Por si acaso pago de otra forma, queda escondido abajo. */
+    if (p.pago_metodo === "tarjeta") {
+      h += '<div class="solaTarj">&#128179; Pag&oacute; con tarjeta: <b>se confirma solo</b> cuando entra el pago. No tienes que revisar nada; en cuanto entre, sale la comanda a cocina.</div>';
+      h += '<details class="otraForma"><summary>&iquest;Te pag&oacute; de otra forma?</summary><div class="dentro">' + yaVi + '</div></details>';
+    } else {
+      h += cuadroCaptura(p.id);
+      h += yaVi;
+    }
     /* LA TERCERA SALIDA. Hasta hoy este pedido tenia una sola: cobrarlo. Si
        el cliente nunca pago —se arrepintio, se le olvido, era una prueba—
        la unica manera de quitarlo de la pantalla era meterle al corte del
@@ -4269,7 +4307,7 @@ var HTML_PANEL = `<!DOCTYPE html>
   <input class="pin" id="pinCampo" type="password" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="••••">
   <button class="btn" id="pinBtn">Entrar</button>
   <div class="aviso oculto" id="pinMsg"></div>
-  <div class="nota">Es el NIP que te dieron con tu instalación. Si lo perdiste, quien te instaló te pone uno nuevo.</div>
+  <div class="nota">Es el NIP de tu negocio: el que te salió al activar tu kit (o el que te dio quien te lo instaló). Si lo olvidaste, entra a <a href="/ayuda" style="color:inherit">lacartamenu.com/ayuda</a>.</div>
 </div>
 
 <!-- ================= APP ================= -->
@@ -32075,7 +32113,7 @@ function hojaLlave(nombre, nip, abre, conAtajos, suPuerta) {
     /* NO una lista fija. Un papel que le promete cortes a un puesto que
        no los trae es una mentira impresa, y esa se queda pegada en su
        mostrador. */
-    '<div class="que"><b>Con estos cuatro n&uacute;meros entra a:</b>' +
+    '<div class="que"><b>Con este NIP entra a:</b>' +
     (abre && abre.length ? abre.join("<br>")
                          : "su men&uacute; y sus precios") + '</div>' +
     /* SU PUERTA. La tira de atajos trae cinco codigos —mesa, cocina, mesero,
@@ -36056,7 +36094,8 @@ async function kitEngancheStripe(env, clave, d) {
   await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
   return { ok: true, tipo: "kit_enganche_stripe", liga };
 }
-async function stripeEngancheAviso(env, tipo, o, prueba) {
+async function stripeEngancheAviso(env, tipo, o, prueba, mandaEnvio) {
+  mandaEnvio = mandaEnvio || (async () => false);
   const md = o.metadata || {};
   const id = String(md.suscripcion || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
   const reg = id ? await stripeLee(env, "suscripciones/" + id + ".json") : null;
@@ -36073,7 +36112,7 @@ async function stripeEngancheAviso(env, tipo, o, prueba) {
     reg["enganche_" + estado] = isoMX();
     await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
   }
-  if (estado === "pagado") await avisaEdsiRed(env, "\u{1F4B5} <b>Pagaron el enganche: $" + SUSCRIPCION.enganche.toLocaleString("en-US") + "</b>" + prueba + "\n" + quien + "\nFalta que active su pago de $" + SUSCRIPCION.mensual + " al mes.");
+  if (estado === "pagado" && !(await mandaEnvio({ titulo: "\u{1F4B5} Pagaron el enganche de una suscripción", nombre: "enganche", base: SUSCRIPCION.enganche, quien, cola: "Falta que active su pago de $" + SUSCRIPCION.mensual + " al mes." }))) await avisaEdsiRed(env, "\u{1F4B5} <b>Pagaron el enganche: $" + SUSCRIPCION.enganche.toLocaleString("en-US") + "</b>" + prueba + "\n" + quien + "\nFalta que active su pago de $" + SUSCRIPCION.mensual + " al mes.");
   if (estado === "esperando") await avisaEdsiRed(env, "\u{1F9FE} <b>Sacaron ficha para el enganche</b> (OXXO o transferencia)" + prueba + "\n" + quien + "\nTodavía no paga.");
   if (estado === "vencio") await avisaEdsiRed(env, "⌛ <b>Venció la ficha del enganche sin pagar</b>" + prueba + "\n" + quien);
   if (estado === "revisar") await avisaEdsiRed(env, "⚠️ <b>Enganche con monto raro</b>" + prueba + ": $" + (Number(o.amount_total) / 100) + "\n" + quien + "\nRevísalo en Stripe.");
@@ -36088,7 +36127,8 @@ async function stripeRegDeSub(env, sub) {
   const reg = await stripeLee(env, "suscripciones/" + String(idx.id).replace(/[^a-z0-9]/g, "") + ".json");
   return reg;
 }
-async function stripeSuscripcionAviso(env, tipo, o, prueba) {
+async function stripeSuscripcionAviso(env, tipo, o, prueba, mandaEnvio) {
+  mandaEnvio = mandaEnvio || (async () => false);
   if (tipo === "checkout.session.completed") {
     const md = o.metadata || {};
     const reg = await stripeLee(env, "suscripciones/" + String(md.suscripcion || "").replace(/[^a-z0-9]/g, "").slice(0, 20) + ".json");
@@ -36097,6 +36137,9 @@ async function stripeSuscripcionAviso(env, tipo, o, prueba) {
     reg.estado = "mensual_activo"; reg.stripe_sub = sub; reg.stripe_estado = "trialing"; reg.stripe_inicio = isoMX();
     await stripeGuarda(env, "suscripciones/" + reg.id + ".json", reg);
     await stripeGuarda(env, "stripe/subs/" + sub + ".json", { id: reg.id });
+    const quienS = reg.negocio + " — " + reg.dueno + "\nTel: " + reg.telefono + (reg.vendedor ? "\nVendedor: " + reg.vendedor : "");
+    if (md.efectivo !== "1" && md.enganche !== "aparte" && await mandaEnvio({ titulo: "✅ Suscripción nueva por Stripe, enganche pagado con tarjeta", nombre: "enganche", base: SUSCRIPCION.enganche, quien: quienS,
+      cola: "$" + SUSCRIPCION.mensual + " al mes a partir de dentro de 30 días.\nDalo de alta en /socio con ese mismo teléfono." })) return { suscripcion: "activa", id: reg.id };
     await avisaEdsiRed(env, "✅ <b>Suscripción nueva por Stripe</b>" + prueba + "\n" + reg.negocio + " — " + reg.dueno + "\nTel: " + reg.telefono +
       (reg.vendedor ? "\nVendedor: " + reg.vendedor : "") + "\nEnganche: " + (md.efectivo === "1" ? "EN EFECTIVO (confírmalo)" : md.enganche === "aparte" ? "pagado aparte por Stripe (OXXO, transferencia o tarjeta; revisa el aviso del enganche)" : "$" + SUSCRIPCION.enganche + " pagado con tarjeta") +
       "\n$" + SUSCRIPCION.mensual + " al mes a partir de dentro de 30 días.\nDalo de alta en /socio con ese mismo teléfono.");
@@ -36193,7 +36236,10 @@ function textoEnvio(r) {
 /* Cuando el pago ya entro: avisa a Edsi UNA vez con la direccion.
    (2.9.46) La marca de pagado se escribe condicionada (etag): si llegan dos
    avisos al mismo tiempo, solo uno gana. Con ENVIA_TOKEN, luego hace la guia. */
-async function envioPagado(env, id, como, monto, prueba, ctx) {
+/* (2.9.58) Con "junto", el aviso de lo que se compro y el de la caja salen en
+   UN mensaje: que compro, cuanto pago en total (con el envio) y la direccion. */
+function pesosAviso(n) { return "$" + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 }); }
+async function envioPagado(env, id, como, monto, prueba, ctx, junto) {
   const limpio = String(id || "").replace(/[^a-z0-9]/g, "").slice(0, 20);
   const x = limpio ? await enviaLeeConEtag(env, limpio) : null;
   if (!x) return false;
@@ -36201,8 +36247,14 @@ async function envioPagado(env, id, como, monto, prueba, ctx) {
   if (reg.pagado || (reg.estado_envio && reg.estado_envio !== "sin_pagar")) return false;
   reg.estado_envio = "pagado"; reg.pagado = isoMX(); reg.como = como;
   if (!(await enviaGuardaSi(env, limpio, reg, x.etag))) return false;
-  await avisaEdsiRed(env, "\u{1F4E6} <b>Mándale su caja</b>" + (prueba || "") + " — pagó $" + monto + " por " + como + "\n" + textoEnvio(reg) +
-    "\n\u{1F517} Su página para seguir la caja (mándasela): " + enviaEsc(enviaLigaCliente(limpio)));
+  const liga = "\n\u{1F517} Su página para seguir la caja (mándasela): " + enviaEsc(enviaLigaCliente(limpio));
+  if (junto) {
+    const det = reg.costo > 0 ? " (" + junto.nombre + " " + pesosAviso(junto.base) + " + envío " + pesosAviso(reg.costo) + ")" : " (envío gratis a PuntoPost)";
+    await avisaEdsiRed(env, "\u{1F4E6} <b>Mándale su caja</b>" + (prueba || "") + "\n" + (junto.titulo || "\u{1F4B0} Pagaron " + junto.que) + ": <b>" + pesosAviso(monto) + "</b>" + det + " por " + como +
+      "\n" + junto.quien + (junto.cola ? "\n" + junto.cola : "") + "\n" + textoEnvio(reg) + liga);
+  } else {
+    await avisaEdsiRed(env, "\u{1F4E6} <b>Mándale su caja</b>" + (prueba || "") + " — pagó " + pesosAviso(monto) + " por " + como + "\n" + textoEnvio(reg) + liga);
+  }
   if (String(env.ENVIA_TOKEN || "").trim()) {
     const p = enviaGuia(env, limpio, prueba).catch(() => {});
     if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(p); else await p;
@@ -36669,20 +36721,32 @@ async function stripeAviso(env, request, ctx) {
   await stripeGuarda(env, "stripe/eventos/" + evId + ".json", { tipo: String(ev.type || ""), fecha: isoMX(), salida });
   return { status: 200, cuerpo: Object.assign({ ok: true }, salida) };
 }
+/* UN SOLO AVISO POR VENTA (2.9.58). Si el pago trae envio, la rama que sabe
+   que se compro (kit, enganche, suscripcion) lo manda junto con la direccion.
+   Si ninguna lo uso, sale el aviso de la caja solo, como antes. */
 async function stripeProcesa(env, ev, ctx) {
   const tipo = String(ev.type || "");
   const o = (ev.data && ev.data.object) || {};
   const md = o.metadata || {};
   const prueba = ev.livemode === true ? "" : " <i>(prueba)</i>";
-  if (md.envio && ((tipo === "checkout.session.completed" && o.payment_status === "paid") || tipo === "checkout.session.async_payment_succeeded")) {
-    try { await envioPagado(env, md.envio, "Stripe", Number(o.amount_total) / 100, prueba, ctx); } catch (e) {}
-  }
+  const conEnvio = !!md.envio && ((tipo === "checkout.session.completed" && o.payment_status === "paid") || tipo === "checkout.session.async_payment_succeeded");
+  let usado = false;
+  const mandaEnvio = async (junto) => {
+    if (!conEnvio || usado) return false;
+    usado = true;
+    try { return await envioPagado(env, md.envio, "Stripe", Number(o.amount_total) / 100, prueba, ctx, junto); } catch (e) { return false; }
+  };
+  const salida = await stripeProcesaUno(env, tipo, o, md, prueba, mandaEnvio);
+  await mandaEnvio(null);
+  return salida;
+}
+async function stripeProcesaUno(env, tipo, o, md, prueba, mandaEnvio) {
   if ((tipo === "checkout.session.completed" && md.que === "suscripcion") || tipo === "invoice.paid" || tipo === "invoice.payment_failed" ||
       tipo === "customer.subscription.updated" || tipo === "customer.subscription.deleted") {
-    return await stripeSuscripcionAviso(env, tipo, o, prueba);
+    return await stripeSuscripcionAviso(env, tipo, o, prueba, mandaEnvio);
   }
   if (tipo.indexOf("checkout.session.") === 0 && md.que === "enganche") {
-    return await stripeEngancheAviso(env, tipo, o, prueba);
+    return await stripeEngancheAviso(env, tipo, o, prueba, mandaEnvio);
   }
   if (tipo.indexOf("checkout.session.") === 0 && md.que === "tanque") {
     const pagado = (tipo === "checkout.session.completed" && o.payment_status === "paid") || tipo === "checkout.session.async_payment_succeeded";
@@ -36714,7 +36778,7 @@ async function stripeProcesa(env, ev, ctx) {
     reg["cuando_" + estado] = isoMX();
     await stripeGuarda(env, "compras/" + (id || reg.sesion) + ".json", reg);
     const quien = (reg.negocio || "(sin negocio)") + " — " + (reg.nombre || "?") + "\nTel: " + (reg.telefono || "?") + (reg.vendedor ? "\nVendedor: " + reg.vendedor : "");
-    if (estado === "pagado" && !yaPagado) await avisaEdsiRed(env, "\u{1F4B0} <b>Pagaron un kit de contado: $" + KIT_CONTADO.toLocaleString("en-US") + "</b>" + prueba + "\n" + quien + "\nMándale su caja.");
+    if (estado === "pagado" && !yaPagado && !(await mandaEnvio({ que: "un kit de contado", nombre: "kit", base: KIT_CONTADO, quien }))) await avisaEdsiRed(env, "\u{1F4B0} <b>Pagaron un kit de contado: $" + KIT_CONTADO.toLocaleString("en-US") + "</b>" + prueba + "\n" + quien + "\nMándale su caja.");
     if (estado === "esperando") await avisaEdsiRed(env, "\u{1F9FE} <b>Sacaron ficha para el kit</b> (OXXO o transferencia)" + prueba + "\n" + quien + "\nTodavía no paga. Cuando pague te aviso.");
     if (estado === "vencio") await avisaEdsiRed(env, "⌛ <b>Venció la ficha del kit sin pagar</b>" + prueba + "\n" + quien);
     if (estado === "revisar") await avisaEdsiRed(env, "⚠️ <b>Pago de kit con monto raro</b>" + prueba + ": $" + (Number(o.amount_total) / 100) + " " + String(o.currency || "") + "\n" + quien + "\nRevísalo en Stripe antes de mandar la caja.");
@@ -37640,7 +37704,17 @@ async function mpCobrar(env, pagoId, ctx) {
   const ref = String(pago.external_reference || "");
   if (/^kit[ce][|]/.test(ref)) {
     const eid = pago.metadata && pago.metadata.envio;
-    if (eid) { try { await envioPagado(env, eid, "Mercado Pago", Number(pago.transaction_amount || 0), "", ctx); } catch (e) {} }
+    let junto = { que: "un kit a 3 meses sin intereses", nombre: "kit", base: 4150, quien: "Tarjeta de crédito, Mercado Pago" };
+    const pd = plazoDe(ref.split("|")[1]);
+    if (ref.indexOf("kitc|") === 0 && pd) junto = { que: "un kit a " + pd.meses + " meses sin intereses", nombre: "kit", base: pd.precio, quien: "Tarjeta de crédito" + (pago.payer && pago.payer.email ? " · " + String(pago.payer.email).replace(/[<>&]/g, "").slice(0, 80) : "") };
+    if (ref.indexOf("kite|") === 0) {
+      let rs = null;
+      try { rs = await stripeLee(env, "suscripciones/" + ref.slice(5).replace(/[^a-z0-9]/g, "").slice(0, 20) + ".json"); } catch (e) { rs = null; }
+      junto = { titulo: "\u{1F4B5} Pagaron el enganche de una suscripción", nombre: "enganche", base: SUSCRIPCION.enganche,
+        quien: rs ? rs.negocio + " — " + rs.dueno + "\nTel: " + rs.telefono + (rs.vendedor ? "\nVendedor: " + rs.vendedor : "") : "(no encontré la suscripción)",
+        cola: "Falta que active su pago de $" + SUSCRIPCION.mensual + " al mes." };
+    }
+    if (eid) { try { await envioPagado(env, eid, "Mercado Pago", Number(pago.transaction_amount || 0), "", ctx, junto); } catch (e) {} }
     return { ok: true, motivo: "kit" };
   }
   const partes = ref.split("|");
@@ -37856,6 +37930,15 @@ async function soportePregunta(env, clave, d) {
 }
 /* LOS INTERESADOS QUE LLEGAN DEL ANUNCIO (lacartamenu.com/pregunta). */
 var PROSPECTO_TOPE_PLATICA = 30;
+/* (2.9.58) El que ya compro y entra desde /ayuda: soporte, no venta. */
+var ORDEN_AYUDA = "Eres el soporte de La Carta (Comandero C1) en lacartamenu.com/ayuda. Te escribe el DUEÑO de un negocio de comida que YA compró su kit y necesita ayuda. " +
+  "Háblale de tú, en español sencillo de México, corto (máximo 4 renglones), amable, en texto plano (sin asteriscos ni #). No le vendas nada. " +
+  "Contesta SOLO con los HECHOS de abajo. Los hechos están escritos para un vendedor: tradúcelos para el dueño y NUNCA repitas instrucciones internas. " +
+  "Para entrar a su negocio: en lacartamenu.com/ayuda escribe la dirección de su negocio (la palabra antes de .lacartamenu.com) y luego su NIP. " +
+  "Si olvidó su NIP o lo que pregunta no está en los hechos, no lo inventes: dile que se lo pasas a una persona de La Carta que le contesta pronto, y pon no_se en true. " +
+  "Si no ha dicho el nombre de su negocio, pídeselo. " +
+  "Responde SOLO un objeto JSON con esta forma: {\"respuesta\":\"...\",\"no_se\":false,\"negocio\":\"\",\"colonia\":\"\",\"nombre\":\"\",\"telefono\":\"\"}. " +
+  "En negocio, colonia, nombre y telefono pon lo que el cliente haya dicho en TODA la plática, o vacío si no lo dijo.";
 var PROSPECTO_TOPE_DIA = 600;
 var ORDEN_PROSPECTO = "Eres el asistente de La Carta (Comandero C1) en lacartamenu.com. Te escribe el DUEÑO de un negocio de comida que vio un anuncio. " +
   "Háblale de usted, en español sencillo de México, corto (máximo 3 renglones), amable y sin presionar, en texto plano (sin asteriscos ni #). " +
@@ -37890,7 +37973,7 @@ async function prospectoCharla(env, clave, d) {
   const hechos = SOPORTE_BASE.map((b) => "- " + b.r).concat(sabido.map((x) => "- (Edsi) " + x.q + " -> " + x.r)).join("\n");
   const res = await soporteIA(env, {
     model: MODELO_OJO,
-    messages: [{ role: "system", content: ORDEN_PROSPECTO + "\n\nTIPO DE NEGOCIO DEL ANUNCIO: " + (reg.tipo || "no se sabe") + "\n\nHECHOS:\n" + hechos }].concat(plat),
+    messages: [{ role: "system", content: (reg.tipo === "ayuda" ? ORDEN_AYUDA : ORDEN_PROSPECTO + "\n\nTIPO DE NEGOCIO DEL ANUNCIO: " + (reg.tipo || "no se sabe")) + "\n\nHECHOS:\n" + hechos }].concat(plat),
     response_format: { type: "json_object" },
     max_completion_tokens: 500
   }, 25);
@@ -37916,7 +37999,7 @@ async function prospectoCharla(env, clave, d) {
     await avisaEdsiRed(env, "\u{1F525} <b>Interesado desde la página</b>\n" + quien + "\n\nPreguntó: " + reg.preguntas.slice(-5).join(" / ").replace(/[<>&]/g, "").slice(0, 600));
   }
   if (dicho.no_se === true) {
-    await avisaEdsiRed(env, "❓ <b>Un interesado preguntó algo que no sé</b>\n" + pregunta.replace(/[<>&]/g, "") + "\n\n" + quien +
+    await avisaEdsiRed(env, (reg.tipo === "ayuda" ? "\u{1F198} <b>Un cliente con kit necesita ayuda</b> (lacartamenu.com/ayuda)\n" : "❓ <b>Un interesado preguntó algo que no sé</b>\n") + pregunta.replace(/[<>&]/g, "") + "\n\n" + quien +
       "\n\nSi tiene WhatsApp o colonia, contáctalo. Si quieres que el bot lo sepa la próxima vez, contéstalo en el soporte.");
   }
   await stripeGuarda(env, llave, reg);
@@ -38454,7 +38537,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.57";  // version: "2.9.57"
+var VERSION_BETO = "2.9.58";  // version: "2.9.58"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -38608,15 +38691,15 @@ p{font-size:15px;line-height:1.5;color:#c9d0d8;margin:0 0 12px}
 </style></head><body>
 <div class="tapa">
   <div class="marca">LA CARTA</div>
-  <h1>Prueba Bluetooth</h1>
-  <p>Esto comprueba si tu impresora puede recibir papel <b>directo desde el navegador</b>, sin RawBT y sin picarle a nada cada vez. Prende la impresora, ten el Bluetooth del tel&eacute;fono encendido, y pica el bot&oacute;n.</p>
+  <h1>&iquest;Conecta tu impresora?</h1>
+  <p>Con esta prueba ves si tu impresora recibe el papel <b>directo desde esta p&aacute;gina</b>, sin instalar nada. Prende la impresora, prende el Bluetooth del tel&eacute;fono y toca el bot&oacute;n 1.</p>
   <button class="btn" id="bConecta">1. Conectar la impresora</button>
   <button class="btn gris" id="bImprime" disabled>2. Imprimir una prueba</button>
   <button class="btn gris" id="bOtra" disabled>3. Otra vez (sin volver a conectar)</button>
-  <button class="btn gris" id="bAcentos" disabled>4. Prueba con acentos</button>
-  <button class="btn gris" id="bImagen" disabled>5. Prueba como imagen (acentos seguros)</button>
+  <button class="btn gris" id="bAcentos" disabled>4. Prueba de letras con acento (&aacute;, &ntilde;)</button>
+  <button class="btn gris" id="bImagen" disabled>5. Prueba como dibujo (as&iacute; los acentos siempre salen)</button>
   <div class="log" id="log">Esperando...</div>
-  <div class="ay">Si al picar el bot&oacute;n la impresora <b>no aparece en la lista</b>, es que no habla Bluetooth de baja energ&iacute;a y este camino no sirve para ella. Si aparece pero no imprime, m&aacute;ndale a Edsi una captura de este cuadro: ah&iacute; viene lo que hace falta.</div>
+  <div class="ay">Si al tocar el bot&oacute;n tu impresora <b>no aparece en la lista</b>, ese modelo no se puede conectar desde aqu&iacute;. Si aparece pero no imprime, <b>m&aacute;ndanos una captura de este cuadro</b> desde <a href="/pregunta?t=ayuda" style="color:inherit">lacartamenu.com/ayuda</a> (bot&oacute;n &laquo;Escribir mi duda&raquo;): ah&iacute; viene lo que hace falta.</div>
 </div>
 <script>
 (function(){
@@ -38854,7 +38937,7 @@ p{font-size:15px;line-height:1.5;color:#c9d0d8;margin:0 0 12px}
     try {
       di("mandando la prueba de acentos (dos tablas)...", "gris");
       await manda(papelAcentos());
-      di("enviado. En el papel: dime si se lee bien la A, la B, o ninguna.", "ok");
+      di("enviado. Fíjate en el papel si se lee bien la A, la B o ninguna.", "ok");
     } catch (e) { di("fallo: " + (e && e.message ? e.message : e), "mal"); }
   };
 })();
@@ -39482,7 +39565,21 @@ h1{font-size:24px;line-height:1.2;margin:18px 0 6px;font-weight:900}
     wa.style.display = "block";
     document.getElementById("conPersona").style.display = "inline";
   }
-  if (TIPO) document.getElementById("ver").href = "/video?t=" + encodeURIComponent(TIPO);
+  /* MODO AYUDA (2.9.58): llega desde /ayuda, ya tiene su kit. No se le vende. */
+  var AYUDA = TIPO === "ayuda";
+  if (AYUDA) {
+    document.title = "Ayuda · La Carta";
+    document.querySelector("h1").innerHTML = "&iquest;En qu&eacute; te ayudamos?";
+    var bj = document.querySelector(".baja"), cp = document.getElementById("conPersona");
+    bj.innerHTML = "<b>Escr&iacute;benos tu duda y el nombre de tu negocio.</b> Te contestamos al momento; si el asistente no sabe, te contesta una persona de La Carta.";
+    if (cp) { bj.appendChild(cp); cp.textContent = " Si prefieres hablar con una persona, usa el botón verde."; }
+    document.getElementById("rapidas").style.display = "none";
+    document.getElementById("ver").style.display = "none";
+    document.getElementById("wa").textContent = "Mejor escríbenos por WhatsApp";
+    t.placeholder = "Tu duda y tu negocio";
+    if (WA) document.getElementById("wa").href = "https://wa.me/" + WA + "?text=" + encodeURIComponent("Hola, ya tengo mi kit de La Carta y necesito ayuda. Mi negocio es: ");
+  }
+  if (TIPO && !AYUDA) document.getElementById("ver").href = "/video?t=" + encodeURIComponent(TIPO);
   function burbuja(texto, quien){
     var d = document.createElement("div");
     d.className = "b " + quien;
@@ -39491,7 +39588,7 @@ h1{font-size:24px;line-height:1.2;margin:18px 0 6px;font-weight:900}
     d.scrollIntoView({ block: "end", behavior: "smooth" });
     return d;
   }
-  burbuja("Hola, soy el asistente de La Carta. Pregúnteme lo que quiera: cuánto cuesta, qué trae la caja o cómo funciona.", "el");
+  burbuja(AYUDA ? "Hola, soy el asistente de La Carta. Escríbeme tu duda y el nombre de tu negocio, y te ayudo." : "Hola, soy el asistente de La Carta. Pregúnteme lo que quiera: cuánto cuesta, qué trae la caja o cómo funciona.", "el");
   function manda(texto){
     texto = String(texto || "").trim();
     if (!texto || ocupado) return;
@@ -39722,6 +39819,9 @@ h1{font-size:26px;line-height:1.18;margin:24px 0 10px;font-weight:900}
 .msg.on{display:block}
 .pie{margin-top:26px;padding-top:15px;border-top:1px solid #232a30;font-size:12.5px;line-height:1.55;color:#78838f}
 .pie a{color:#8fd6ac}
+/* ARREGLOS DEL RECORRIDO (2.9.58): la direccion se escribe en minusculas. */
+.campo.dirNeg{text-transform:none;letter-spacing:0;font-size:18px}
+.caja .ej{font-size:13.5px;color:#98a2ab}
 </style></head><body><div class="tapa">
 <div class="marca">LA CARTA<small>COMANDERO C1</small></div>
 <h1>Ayuda con tu kit</h1>
@@ -39734,13 +39834,16 @@ h1{font-size:26px;line-height:1.18;margin:24px 0 10px;font-weight:900}
 <a class="btn" id="bAct" href="#">Activar mi kit</a>
 <a class="btn gris" id="bRe" href="#">Reimprimir instructivo, p&oacute;liza y c&oacute;digos de mesa</a>
 <div class="msg" id="m"></div>
-<p style="margin:12px 0 0;font-size:13.5px;color:#98a2ab">Para reimprimir, &aacute;brelo en el celular Android que usa la impresora. Si no encuentras tu c&oacute;digo, <a href="/pregunta" style="color:#8fd6ac">preg&uacute;ntanos</a>.</p>
+<p style="margin:12px 0 0;font-size:13.5px;color:#98a2ab">Para reimprimir, &aacute;brelo en el celular Android que usa la impresora. Si no encuentras tu c&oacute;digo, <a href="/pregunta?t=ayuda" style="color:#8fd6ac">escr&iacute;benos</a>.</p>
 </div>
 
-<div class="caja">
+<div class="caja" id="entrar">
 <b class="t">&iquest;Ya lo tienes funcionando?</b>
-<p>Entra a tu negocio con tu clave y tu NIP.</p>
-<a class="btn" href="/casa">Entrar a mi negocio</a>
+<p>Escribe la <b>direcci&oacute;n de tu negocio</b>: la palabra que va antes de <b>.lacartamenu.com</b>. Luego te pide tu NIP.</p>
+<p class="ej">Si tu direcci&oacute;n es <b>tacosdonalupe.lacartamenu.com</b>, escribe <b>tacosdonalupe</b>. Viene en tu papel &laquo;Esto es tuyo&raquo;.</p>
+<input class="campo dirNeg" id="dirNeg" maxlength="60" placeholder="Escribe aqu&iacute; tu direcci&oacute;n" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="url">
+<a class="btn" id="bEntrar" href="#">Entrar a mi negocio</a>
+<div class="msg" id="mEntrar"></div>
 </div>
 
 <div class="caja">
@@ -39758,8 +39861,8 @@ h1{font-size:26px;line-height:1.18;margin:24px 0 10px;font-weight:900}
 
 <div class="caja">
 <b class="t">&iquest;Sigues atorado?</b>
-<p>Preg&uacute;ntanos lo que sea. Si no se resuelve ah&iacute;, te contesta Edsi.</p>
-<a class="btn gris" href="/pregunta">Preguntar</a>
+<p>Escr&iacute;benos tu duda y el nombre de tu negocio. Te contesta el asistente al momento y, si no sabe, una persona de La Carta.</p>
+<a class="btn gris" href="/pregunta?t=ayuda">Escribir mi duda</a>
 </div>
 
 <div class="pie">Funciona con tel&eacute;fono o tableta Android. No es compatible con iPhone ni iPad.<br>
@@ -39775,6 +39878,40 @@ h1{font-size:26px;line-height:1.18;margin:24px 0 10px;font-weight:900}
   }
   document.getElementById('bAct').onclick = function(e){ e.preventDefault(); var v = codigo(); if (v) location.href = '/k/' + v; };
   document.getElementById('bRe').onclick = function(e){ e.preventDefault(); var v = codigo(); if (v) location.href = '/kitpapel?k=' + v; };
+})();
+/* ENTRAR A MI NEGOCIO (2.9.58). Antes mandaba a /casa sin decir de que negocio
+   y abria el de muestra: "Ese NIP no es". Ahora se pide la direccion, se
+   comprueba que exista y se le manda a SU casa. */
+(function(){
+  var d = document.getElementById('dirNeg'), m = document.getElementById('mEntrar'), b = document.getElementById('bEntrar');
+  function di(t){ m.className = 'msg on'; m.innerHTML = t; }
+  function limpia(v){
+    v = String(v || '').toLowerCase().trim().replace('https://', '').replace('http://', '');
+    var p = v.indexOf('.'); if (p > -1) v = v.slice(0, p);
+    p = v.indexOf('/'); if (p > -1) v = v.slice(0, p);
+    return v.replace(/[^a-z0-9-]/g, '').slice(0, 40);
+  }
+  function ve(cl){
+    var h = (location.hostname || '').toLowerCase();
+    if (h === 'lacartamenu.com' || h === 'www.lacartamenu.com') location.href = 'https://' + cl + '.lacartamenu.com/casa';
+    else location.href = '/casa?c=' + encodeURIComponent(cl);
+  }
+  b.onclick = function(e){
+    e.preventDefault();
+    var cl = limpia(d.value);
+    if (cl.length < 2) { di('Escribe la direcci&oacute;n de tu negocio: la palabra antes de <b>.lacartamenu.com</b>.'); d.focus(); return; }
+    m.className = 'msg'; b.textContent = 'Buscando tu negocio...';
+    fetch('/negocio', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ clave: cl }) })
+      .then(function(r){ return r.json(); }).then(function(r){
+        b.textContent = 'Entrar a mi negocio';
+        if (r && r.ok && r.negocio) { ve(cl); return; }
+        di('No encontr&eacute; <b>' + cl + '.lacartamenu.com</b>. Rev&iacute;salo en tu papel &laquo;Esto es tuyo&raquo; o <a href="/pregunta?t=ayuda" style="color:inherit">escr&iacute;benos</a>. ' +
+           'Si est&aacute;s seguro de que as&iacute; es, <a href="#" id="aunAsi" style="color:inherit">entra de todos modos</a>.');
+        var a = document.getElementById('aunAsi'); if (a) a.onclick = function(ev){ ev.preventDefault(); ve(cl); };
+      }).catch(function(){ b.textContent = 'Entrar a mi negocio'; di('No se pudo conectar. Revisa tu se&ntilde;al.'); });
+  };
+  d.addEventListener('keydown', function(e){ if (e.key === 'Enter') b.click(); });
+  if (location.hash === '#entrar') d.focus();
 })();
 </script>
 </body></html>`;
@@ -39812,13 +39949,26 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 .pie{margin-top:26px;padding-top:15px;border-top:1px solid #232a30;font-size:12.5px;line-height:1.55;color:#78838f}
 .envop.si{border-color:#8fd6ac;background:#16261d}
 .campo{width:100%;margin:0 0 9px;padding:13px 14px;border-radius:11px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;font-size:15px;font-family:inherit}
+/* ARREGLOS DEL RECORRIDO (2.9.58) */
+.plazo .mes{flex:1 1 auto;min-width:0}
+.plazo .cuota{flex:0 1 auto;min-width:0;max-width:55%}
+.plazo .cuota b{white-space:nowrap}
+.listo{display:none;margin:20px 0 0;padding:16px;border-radius:14px;background:#14301f;border:1.5px solid #8fd6ac;color:#a8e8c4;font-size:15.5px;line-height:1.5}
+.listo.on{display:block}
+.listo b{color:#f2f4f6}
+.listo b:first-child{display:block;font-size:19px;margin-bottom:4px}
+.listo.mal{background:#3a1e1e;border-color:#7a3a3a;color:#ffc9c9}
+#otraCaja{display:none;margin:18px auto 0;background:transparent;border:1px solid #2f3a41;color:#98a2ab;border-radius:10px;padding:9px 16px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer}
 </style></head><body><div class="tapa">
 <div class="marca">LA CARTA<small>COMANDERO C1</small></div>
 
+<div class="listo" id="listo"></div>
 <a id="sigue" href="/envio" style="display:none;margin:20px 0 0;padding:15px 16px;border-radius:14px;background:#14301f;border:1.5px solid #8fd6ac;color:#a8e8c4;text-decoration:none;font-size:15px;line-height:1.45"><b style="display:block;font-size:17px;color:#f2f4f6;margin-bottom:3px">&#128230; Sigue tu caja aqu&iacute;</b>Ah&iacute; ves cu&aacute;ndo sale, tu n&uacute;mero de gu&iacute;a y por d&oacute;nde va. Guarda la liga.</a>
+<button id="otraCaja" type="button">Comprar otra caja</button>
 
+<div id="forma">
 <h1>P&aacute;galo con tu tarjeta,<br>a meses sin intereses.</h1>
-<p class="baja">De contado son <b>$3,700</b>, con tarjeta u OXXO. O a 3 meses sin intereses con tarjeta de cr&eacute;dito:</p>
+<p class="baja">De contado son <b id="pBaja">$3,700</b>, con tarjeta u OXXO. O a 3 meses sin intereses con tarjeta de cr&eacute;dito:</p>
 <p class="ay" style="margin:-8px 0 16px">Por ahora no emitimos factura.</p>
 
 <div id="envBox" style="margin:0 0 26px">
@@ -39849,10 +39999,11 @@ label{display:block;font-size:12.5px;font-weight:800;letter-spacing:.06em;text-t
 <p class="ay">Solo tarjeta de cr&eacute;dito. El cobro lo hace Mercado Pago, no nosotros.</p>
 <!--STRIPE_CONTADO-->
 <p class="ay" style="margin-top:6px">El pago de contado o a 3 meses cubre <b>un a&ntilde;o</b> de servicio. Cada a&ntilde;o se renueva.</p>
+</div>
 
 <div id="suscr" style="margin-top:28px">
 <label>O suscr&iacute;bete</label>
-<div class="trae" style="margin-bottom:12px"><b>$1,300 HOY Y $400 AL MES</b>
+<div class="trae" style="margin-bottom:12px"><b id="sTitulo">$1,300 HOY Y $400 AL MES</b>
 <p>Pagas el enganche y luego $400 cada mes, con cobro autom&aacute;tico a tu tarjeta. Si dejas de pagar, te quedas con la impresora y el servicio se corta.</p></div>
 <div id="sDatos">
 <input style="width:100%;margin:0 0 9px;padding:13px 14px;border-radius:11px;border:1.5px solid #2f3a41;background:#1b2126;color:#f2f4f6;font-size:15px;font-family:inherit" id="sNeg" placeholder="Nombre de tu negocio">
@@ -39894,6 +40045,24 @@ function pintaEnvio(){
   $e('envNota').innerHTML = ENV.modo === 'domicilio' ? 'Se suman <b>$170</b> de env&iacute;o a tu pago. Te llega a la puerta con FedEx o Paquetexpress y te pasamos tu n&uacute;mero de gu&iacute;a.'
     : ENV.modo === 'sucursal' ? 'Te la mandamos <b>gratis</b> a la sucursal PuntoPost m&aacute;s cercana a tu c&oacute;digo postal y te llamamos para decirte d&oacute;nde recogerla. Si en tu ciudad no hay PuntoPost, te llamamos antes de mandarla.'
     : 'La caja te la da en persona quien te ense&ntilde;&oacute; La Carta.';
+  pintaPrecios();
+}
+/* LOS PRECIOS CON EL ENVIO (2.9.58). A la puerta se suman $170 a lo que cobra
+   cada boton. Mercado Pago reparte el total (kit + envio) en los 3 meses. */
+var PRECIO = { contado: 3700, meses3: 4150, enganche: 1300 };
+function conComas(t){ var r = ''; while (t.length > 3) { r = ',' + t.slice(-3) + r; t = t.slice(0, -3); } return t + r; }
+function pesosTxt(n){ var c = Math.round(n * 100), e = Math.floor(c / 100), d = c % 100; return '$' + conComas(String(e)) + (d ? '.' + (d < 10 ? '0' : '') + d : ''); }
+function pintaPrecios(){
+  var x = ENV.modo === 'domicilio' ? 170 : 0;
+  function pon(sel, t){ var e = document.querySelector(sel); if (e) e.innerHTML = t; }
+  pon('#pBaja', pesosTxt(PRECIO.contado + x) + (x ? ' con env&iacute;o' : ''));
+  pon('#bContado .cuota b', pesosTxt(PRECIO.contado + x));
+  pon('#bContado .cuota span', x ? 'ya con env&iacute;o &middot; tarjeta, OXXO o transferencia' : 'tarjeta, OXXO o transferencia');
+  pon('.plazo[data-meses="3"] .cuota b', pesosTxt((PRECIO.meses3 + x) / 3));
+  pon('.plazo[data-meses="3"] .cuota span', 'al mes &middot; total ' + pesosTxt(PRECIO.meses3 + x) + (x ? ' con env&iacute;o' : ''));
+  pon('#sEng .cuota b', pesosTxt(PRECIO.enganche + x));
+  pon('#sOxxo .cuota b', pesosTxt(PRECIO.enganche + x));
+  pon('#sTitulo', x ? pesosTxt(PRECIO.enganche + x) + ' HOY (CON ENV&Iacute;O) Y $400 AL MES' : '$1,300 HOY Y $400 AL MES');
 }
 (function(){
   var ops = document.querySelectorAll('.envop');
@@ -39920,11 +40089,29 @@ function envioListo(){
   var sg = document.getElementById('sigue');
   sg.href = '/envio/' + eid; sg.style.display = 'block';
 })();
-if (pago === 'suscrito') avisa('<b>Listo, quedaste suscrito.</b> Cada mes se cobran $400 a tu tarjeta. Ya nos lleg&oacute; el aviso.', true);
-else if (pago === 'ok') avisa('<b>Listo, tu pago entr&oacute;.</b> Ya nos lleg&oacute; el aviso. Guarda el correo de Mercado Pago.', true);
-else if (pago === 'pendiente') avisa('Tu pago qued&oacute; en proceso. En cuanto lo aprueben, listo.', true);
-else if (pago === 'no') avisa('No se complet&oacute; el pago. Puedes intentarlo otra vez.');
-else if (pago === 'stripe') avisa('<b>Listo, recibimos tu pedido.</b> Si pagaste con tarjeta, ya entr&oacute;. Si sacaste ficha de OXXO o transferencia, en cuanto pagues nos llega el aviso y te mandamos tu caja.', true);
+/* AL REGRESAR DE PAGAR (2.9.58). El aviso va HASTA ARRIBA y el formulario se
+   esconde: con todo a la vista, el que ya pago se ponia a pagar otra vez. */
+function avisaArriba(t, bien){ var l = document.getElementById('listo'); l.className = 'listo on' + (bien ? '' : ' mal'); l.innerHTML = t; }
+function yaCompro(conSuscr){
+  document.getElementById('forma').style.display = 'none';
+  if (!conSuscr) { document.getElementById('suscr').style.display = 'none'; document.getElementById('otraCaja').style.display = 'block'; }
+  window.scrollTo(0, 0);
+}
+document.getElementById('otraCaja').onclick = function(){
+  document.getElementById('forma').style.display = '';
+  document.getElementById('suscr').style.display = '';
+  document.getElementById('sDatos').style.display = ''; document.getElementById('sMes').style.display = 'none';
+  this.style.display = 'none';
+  document.getElementById('forma').scrollIntoView();
+};
+var REGRESO = {
+  suscrito: '<b>Listo, quedaste suscrito.</b> Cada mes se cobran $400 a tu tarjeta. Ya nos lleg&oacute; el aviso y te mandamos tu caja.',
+  ok: '<b>Listo, tu pago entr&oacute;.</b> Ya nos lleg&oacute; el aviso y te mandamos tu caja. Guarda el correo de Mercado Pago.',
+  pendiente: '<b>Tu pago qued&oacute; en proceso.</b> En cuanto lo aprueben nos llega el aviso y te mandamos tu caja. No vuelvas a pagar.',
+  stripe: '<b>Listo, recibimos tu pedido.</b> Si pagaste con tarjeta, ya entr&oacute;. Si sacaste ficha de OXXO o transferencia, en cuanto pagues nos llega el aviso y te mandamos tu caja.'
+};
+if (Object.prototype.hasOwnProperty.call(REGRESO, pago)) { avisaArriba(REGRESO[pago], true); yaCompro(false); }
+else if (pago === 'no') avisaArriba('<b>No se complet&oacute; el pago.</b> No se te cobr&oacute; nada. Puedes intentarlo otra vez aqu&iacute; abajo.', false);
 /* DE CONTADO POR STRIPE (el boton solo existe si Stripe esta listo). */
 (function(){
   var b = document.getElementById('bContado');
@@ -39956,10 +40143,10 @@ var botones = document.querySelectorAll('.plazo[data-meses]');
   }
   if (qs.get('paso') === 'mensual' && idS) {
     $s('sDatos').style.display = 'none'; $s('sMes').style.display = 'block';
-    $s('suscr').scrollIntoView();
-    if (qs.get('eng') === 'pendiente') avisa('Tu enganche qued&oacute; en proceso (OXXO). Ya puedes activar tu pago mensual.', true);
-    else if (qs.get('eng') === 'stripe') avisa('Si pagaste el enganche con tarjeta, ya entr&oacute;. Si sacaste ficha de OXXO o transferencia, p&aacute;gala en los pr&oacute;ximos 3 d&iacute;as. <b>Ahora activa tu pago de $400 al mes.</b>', true);
-    else avisa('<b>Tu enganche entr&oacute;.</b> Falta un paso: activa tu pago mensual.', true);
+    yaCompro(true);
+    if (qs.get('eng') === 'pendiente') avisaArriba('Tu enganche qued&oacute; en proceso (OXXO). Ya puedes activar tu pago mensual.', true);
+    else if (qs.get('eng') === 'stripe') avisaArriba('<b>Recibimos tu enganche.</b> Si pagaste el enganche con tarjeta, ya entr&oacute;. Si sacaste ficha de OXXO o transferencia, p&aacute;gala en los pr&oacute;ximos 3 d&iacute;as. <b>Ahora activa tu pago de $400 al mes.</b>', true);
+    else avisaArriba('<b>Tu enganche entr&oacute;.</b> Falta un paso: activa tu pago mensual aqu&iacute; abajo.', true);
   }
   function mensual(efectivo, b){
     b.disabled = true; var antes = b.innerHTML; b.innerHTML = '<span class="mes">Abriendo la p&aacute;gina de pago...</span>';
@@ -41217,7 +41404,7 @@ input:focus{outline:2px solid #8fd6ac;outline-offset:1px}
 .hoja.on{display:block}
 .dato{background:#1b2126;border:1px solid #2b333a;border-radius:14px;padding:16px;text-align:center;margin-top:14px}
 .dato b{display:block;font-size:11px;font-weight:800;letter-spacing:1.6px;color:#8b959e;margin-bottom:6px}
-.dato .dir{font-size:20px;font-weight:800;word-break:break-all;line-height:1.3}
+.dato .dir{font-size:20px;font-weight:800;overflow-wrap:anywhere;line-height:1.3}
 .dato .nip{font-family:ui-monospace,"Courier New",monospace;font-size:46px;font-weight:900;letter-spacing:9px}
 .ojo{background:#2e2612;border:1px solid #5a4a1e;border-radius:12px;padding:13px 14px;
   font-size:14px;line-height:1.55;color:#f0dca8;margin-top:16px}
@@ -41244,7 +41431,7 @@ input:focus{outline:2px solid #8fd6ac;outline-offset:1px}
 <div class="hoja on" id="hEscoge">
   <button class="btn" id="bNuevo">Prender mi negocio</button>
   <div class="ay">Toma dos minutos y no vas a necesitar a nadie.</div>
-  <button class="btn claro" id="bYaTengo">Ya tengo mis cuatro n&uacute;meros</button>
+  <button class="btn claro" id="bYaTengo">Ya tengo mi NIP</button>
 </div>
 
 <!-- ---------- 1. el nombre ---------- -->
@@ -41275,8 +41462,8 @@ input:focus{outline:2px solid #8fd6ac;outline-offset:1px}
 <!-- ---------- 2. esto es tuyo ---------- -->
 <div class="hoja" id="hTuyo">
   <div class="dato"><b>TU DIRECCI&Oacute;N</b><span class="dir" id="vDir">&nbsp;</span></div>
-  <div class="dato"><b>TUS CUATRO N&Uacute;MEROS</b><span class="nip" id="vNip">&nbsp;</span></div>
-  <div class="ojo"><b>Ap&uacute;ntalos ahorita.</b> Con esos cuatro n&uacute;meros entras a tus ventas,
+  <div class="dato"><b>TU NIP</b><span class="nip" id="vNip">&nbsp;</span></div>
+  <div class="ojo"><b>Ap&uacute;ntalos ahorita.</b> Con tu NIP entras a tus ventas,
   tu men&uacute; y tus precios. No los podemos volver a ense&ntilde;ar &mdash; ni nosotros los
   podemos ver.</div>
   <button class="btn" id="bImprime">&#128424; Impr&iacute;melos</button>
@@ -41300,7 +41487,7 @@ input:focus{outline:2px solid #8fd6ac;outline-offset:1px}
 <!-- ---------- 4. tu menu ---------- -->
 <div class="hoja" id="hMenu">
   <p class="baja">Tus mesas ya abren <b>tu</b> men&uacute;, pero todav&iacute;a est&aacute; vac&iacute;o. No lo escribas: <b>t&oacute;male una foto</b> al de tu pared, tu cartulina o tu hoja, y yo lo leo con sus precios.</p>
-  <div class="ojo">Te va a pedir tus cuatro n&uacute;meros: son los que acabas de apuntar.</div>
+  <div class="ojo">Entras directo, sin volver a escribir tu NIP. Si alg&uacute;n d&iacute;a te lo pide, es el que acabas de apuntar.</div>
   <button class="btn" id="bMenuFoto">&#128247; Tomarle foto a mi men&uacute;</button>
   <button class="btn claro" id="bMenuLuego">Lo hago despu&eacute;s</button>
 </div>
@@ -41310,7 +41497,7 @@ input:focus{outline:2px solid #8fd6ac;outline-offset:1px}
   <label for="cl">Tu direcci&oacute;n</label>
   <input id="cl" autocomplete="off" autocapitalize="none" placeholder="buentaco">
   <div class="ay">Es la primera palabra de tu direcci&oacute;n, la que viene en tu papel. Si dice <b>buentaco.lacartamenu.com</b>, escribe <b>buentaco</b>.</div>
-  <label for="np">Tus cuatro n&uacute;meros</label>
+  <label for="np">Tu NIP</label>
   <input id="np" type="password" inputmode="numeric" autocomplete="off" placeholder="4 d&iacute;gitos">
   <button class="btn" id="b">Activar mis tarjetas</button>
   <button class="btn claro" id="bAtras2">Regresar</button>
@@ -41621,7 +41808,7 @@ $('bNuevo').onclick = function(){
 };
 $('bYaTengo').onclick = function(){
   ve('hViejo', 'Dile a tus tarjetas de qui&eacute;n son.',
-     'Con la direcci&oacute;n y los cuatro n&uacute;meros que ya te dieron.', true);
+     'Con la direcci&oacute;n de tu negocio y tu NIP.', true);
 };
 $('bAtras1').onclick = function(){ ve('hEscoge', 'Tus tarjetas ya est&aacute;n listas.', 'Solo falta decirles de qu&eacute; negocio son. Es una vez y para siempre.', true); };
 $('bAtras2').onclick = function(){ ve('hEscoge', 'Tus tarjetas ya est&aacute;n listas.', 'Solo falta decirles de qu&eacute; negocio son. Es una vez y para siempre.', true); };
@@ -41640,7 +41827,11 @@ $('bPrende').onclick = function(){
     b.disabled = false; b.textContent = 'Prenderlo';
     if (!r || !r.ok) { avisa((r && r.error) ? r.error : 'No se pudo. Intentalo otra vez.'); return; }
     MIO.clave = r.clave; MIO.nip = r.nip;
-    $('vDir').textContent = r.clave + '.lacartamenu.com';
+    /* (2.9.58) Que no se corte a media palabra: se parte antes del punto y
+       se achica si es larga. */
+    var cl = String(r.clave || '').replace(/[^a-z0-9-]/g, '');
+    $('vDir').innerHTML = cl + '<wbr>.lacartamenu.com';
+    $('vDir').style.fontSize = Math.max(14, Math.min(20, Math.floor(300 / ((cl.length + 16) * 0.6)))) + 'px';
     $('vNip').textContent = r.nip;
     MIO.negocio = ng;
     /* LA IMPRESORA VA ANTES QUE SUS DATOS. En la pantalla que sigue se le
@@ -41660,7 +41851,7 @@ $('bPrende').onclick = function(){
    papel no es obligatorio, apuntarlos si. */
 var TRAE_IMPRE = true;
 function aSusDatos(){
-  ve('hTuyo', 'Ya est&aacute;.<br>Esto es tuyo.', null, false);
+  ve('hTuyo', 'Ya est&aacute;.<br>Esto es tuyo.', '', false);
   $('bImprime').style.display = TRAE_IMPRE ? '' : 'none';
   $('pie').innerHTML = 'Gu&aacute;rdalo donde guardas el dinero. Los tickets que imprime el equipo son documentos informativos, no comprobantes fiscales.';
 }
@@ -41691,10 +41882,10 @@ function papelDatos(){
   pon(h, "TU DIRECCIÓN", "bold 16px sans-serif", 22);
   pon(h, MIO.clave + ".lacartamenu.com", "bold 22px sans-serif", 30);
   h.y += 6;
-  pon(h, "TUS CUATRO NÚMEROS", "bold 16px sans-serif", 22);
+  pon(h, "TU NIP", "bold 16px sans-serif", 22);
   pon(h, String(MIO.nip), "bold 64px sans-serif", 74);
   raya(h);
-  pon(h, "Con esos cuatro números entras a tus ventas, tu menú y tus precios. No se pueden volver a enseñar.", "15px sans-serif", 20);
+  pon(h, "Con tu NIP entras a tus ventas, tu menú y tus precios. No se puede volver a enseñar.", "15px sans-serif", 20);
   h.y += 6;
   pon(h, "LA CARTA · COMANDERO C1 · no fiscal", "bold 14px sans-serif", 20, "centro");
   return recorta(h);
@@ -41740,21 +41931,32 @@ $('bImprime').onclick = function(){
 /* Antes del icono, las tarjetas: son lo que trae en la mano y nadie le habia
    dicho que ya son suyas. Si no se lo decimos, las deja en la caja. */
 $('bSigue').onclick = function(){
-  ve('hTarj', 'Tus cinco tarjetas<br>ya son tuyas', null, false);
+  ve('hTarj', 'Tus cinco tarjetas<br>ya son tuyas', '', false);
 };
 
 /* Y de aqui derecho a que le quede el icono en su pantalla. No se le manda
    al panel pelon: entraria esa vez y al dia siguiente andaria buscando. */
 $('bTarjOk').onclick = function(){
-  ve('hMenu', 'Falta lo m&aacute;s importante:<br>tu men&uacute;', null, false);
+  ve('hMenu', 'Falta lo m&aacute;s importante:<br>tu men&uacute;', '', false);
 };
 /* El negocio nace vacio: sin esto, el primer cliente que escanea la mesa ve
    un menu sin platillos. El panel ya lee el menu de una foto (#pCarta). */
+/* (2.9.58) Acaba de ver su NIP en esta misma pestana: el panel no se lo vuelve
+   a pedir. Se revisa con el servidor (/beto-entrar) y se guarda igual que lo
+   guarda el panel al entrar (sessionStorage, solo esta pestana). */
+function guardaEntrada(){
+  return fetch('/beto-entrar', { method: 'POST', headers: {'content-type':'application/json'},
+    body: JSON.stringify({ c: MIO.clave, pin: MIO.nip }) }).then(function(r){ return r.json(); }).then(function(r){
+    if (r && r.ok) { try { sessionStorage.setItem('panel_' + MIO.clave, JSON.stringify({ p: MIO.nip, r: r.rol || 'dueno', s: !!r.sin_pin })); } catch (e) {} }
+  }).catch(function(){});
+}
 $('bMenuFoto').onclick = function(){
-  location.href = '/panel?c=' + encodeURIComponent(MIO.clave) + '&d=casa#pCarta';
+  this.disabled = true;
+  guardaEntrada().then(function(){ location.href = '/panel?c=' + encodeURIComponent(MIO.clave) + '&d=casa#pCarta'; });
 };
 $('bMenuLuego').onclick = function(){
-  location.href = '/ponerme?c=' + encodeURIComponent(MIO.clave) + '&r=panel';
+  this.disabled = true;
+  guardaEntrada().then(function(){ location.href = '/ponerme?c=' + encodeURIComponent(MIO.clave) + '&r=panel'; });
 };
 
 /* ---------- la de siempre, para el que ya tiene negocio ---------- */
@@ -41762,7 +41964,7 @@ $('b').onclick = function(){
   var cl = $('cl').value.trim().toLowerCase();
   var np = $('np').value.trim();
   if (!cl) { avisa('Escribe tu direccion, la que viene en tu papel.'); return; }
-  if (!np) { avisa('Escribe tus cuatro numeros.'); return; }
+  if (!np) { avisa('Escribe tu NIP.'); return; }
   var b = $('b');
   b.disabled = true; b.textContent = 'Activando...';
   fetch('/beto-guarda', {
@@ -43044,6 +43246,10 @@ await chatAvisar(env, cfg,
       });
     }
     if (ruta === "/casa") {
+      /* (2.9.58) Sin subdominio ni ?c= no se sabe de quien es: que lo diga. */
+      if (!q.get("c") && !q.get("clave") && (url.hostname === DOMINIO_PUBLICO || url.hostname === "www." + DOMINIO_PUBLICO)) {
+        return Response.redirect("https://" + DOMINIO_PUBLICO + "/ayuda#entrar", 302);
+      }
       return new Response(HTML_CASA, {
         status: 200,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
