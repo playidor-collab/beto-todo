@@ -6,7 +6,7 @@
   "compatibility_date": "2025-01-01",
   "keep_vars": true,
   "vars": { "COBRO_SOLO": "buentaco", "MP_APP_ID": "7526447272444426", "MP_PKCE": "si", "DATOS": "doble" },
-  "triggers": { "crons": ["0 15 * * *"] },
+  "triggers": { "crons": ["0 15 * * *", "0 */4 * * *"] },
   "routes": [
     {
       "pattern": "lacartamenu.com/*",
@@ -25,5 +25,13 @@
       "binding": "FOTOS",
       "bucket_name": "beto-tickets"
     }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "COCINA_VIVO", "class_name": "CocinaVivo" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1-cocina-vivo", "new_sqlite_classes": ["CocinaVivo"] }
   ]
 }
