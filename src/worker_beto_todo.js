@@ -27482,7 +27482,7 @@ function horaMX(fecha) {
   }
 }
 __name(horaMX, "horaMX");
-async function traerFilas(env, tablaId, clave) {
+async function n8nTraerFilas(env, tablaId, clave) {
   const filas = [];
   let cursor = null;
   let usarFiltro = true;
@@ -27517,7 +27517,7 @@ async function traerFilas(env, tablaId, clave) {
   }
   return clave ? filas.filter((f) => String(f.clave) === String(clave)) : filas;
 }
-__name(traerFilas, "traerFilas");
+__name(n8nTraerFilas, "n8nTraerFilas");
 async function traerConfig(env, clave) {
   try {
     const filas = await traerFilas(env, TABLAS.config, clave);
@@ -27527,7 +27527,7 @@ async function traerConfig(env, clave) {
   }
 }
 __name(traerConfig, "traerConfig");
-async function traerCon(env, tablaId, condiciones) {
+async function n8nTraerCon(env, tablaId, condiciones) {
   const filas = [];
   let cursor = null;
   for (let vuelta = 0; vuelta < 40; vuelta++) {
@@ -27554,7 +27554,7 @@ async function traerCon(env, tablaId, condiciones) {
     });
   });
 }
-__name(traerCon, "traerCon");
+__name(n8nTraerCon, "n8nTraerCon");
 async function traerRepartidor(env, claveMoto) {
   const filas = await traerCon(env, TABLA_REPARTIDORES, [
     { columnName: "clave", condition: "eq", value: String(claveMoto) }
@@ -27562,7 +27562,7 @@ async function traerRepartidor(env, claveMoto) {
   return filas[0] || null;
 }
 __name(traerRepartidor, "traerRepartidor");
-async function insertarFilas(env, tablaId, filas) {
+async function n8nInsertarFilas(env, tablaId, filas) {
   const r = await fetch(N8N + "/api/v1/data-tables/" + tablaId + "/rows", {
     method: "POST",
     headers: Object.assign({ "content-type": "application/json" }, cabeceras(env)),
@@ -27579,8 +27579,8 @@ async function insertarFilas(env, tablaId, filas) {
   if (devuelto && Array.isArray(devuelto.data)) return devuelto.data;
   return [];
 }
-__name(insertarFilas, "insertarFilas");
-async function actualizarFilas(env, tablaId, condiciones, datos) {
+__name(n8nInsertarFilas, "n8nInsertarFilas");
+async function n8nActualizarFilas(env, tablaId, condiciones, datos) {
   const r = await fetch(N8N + "/api/v1/data-tables/" + tablaId + "/rows/update", {
     method: "PATCH",
     headers: Object.assign({ "content-type": "application/json" }, cabeceras(env)),
@@ -27601,7 +27601,7 @@ async function actualizarFilas(env, tablaId, condiciones, datos) {
   if (devuelto && Array.isArray(devuelto.data)) return devuelto.data;
   return [];
 }
-__name(actualizarFilas, "actualizarFilas");
+__name(n8nActualizarFilas, "n8nActualizarFilas");
 /* BORRAR DE VERDAD. Es el unico lugar del sistema que quita filas, y borra
    POR LISTA DE NUMEROS, nunca por condicion: una condicion mal entendida por
    la tabla se lleva lo que no debia; un numero no se puede malinterpretar.
@@ -27609,7 +27609,7 @@ __name(actualizarFilas, "actualizarFilas");
    Y antes de borrar, se releen las filas BAJO LA CLAVE DEL NEGOCIO y solo
    pasan los numeros que de verdad son suyos. Asi ni un error de dedo ni una
    lista inventada tocan el menu de otro. */
-async function borrarPorIds(env, tablaId, clave, ids) {
+async function n8nBorrarPorIds(env, tablaId, clave, ids) {
   const dueno = String(clave || "").trim();
   if (!dueno) throw new Error("borrar sin negocio no se permite");
   const quiere = (ids || []).map(Number).filter((n) => n > 0);
@@ -27640,7 +27640,411 @@ async function borrarPorIds(env, tablaId, clave, ids) {
      que se pidieron: la respuesta fue 2xx. */
   return van.map((n) => ({ id: n }));
 }
+__name(n8nBorrarPorIds, "n8nBorrarPorIds");
+/* LA CAPA DE DATOS (2.9.60). Las cinco puertas de siempre (traerFilas,
+   traerCon, insertarFilas, actualizarFilas, borrarPorIds) ahora preguntan
+   primero a donde ir. La variable DATOS decide:
+     "n8n" o nada -> como siempre, solo n8n.
+     "doble"      -> lee de n8n; escribe en n8n y copia en D1 lo que n8n
+                     devolvio, con el MISMO id. Si D1 falla, la operacion del
+                     cliente sigue bien: se anota y Edsi recibe un aviso como
+                     mucho cada hora.
+     "d1"         -> lee y escribe solo en D1.
+   Sin el binding D1_BETO, todo es "n8n" pase lo que pase.
+   En D1 cada renglon se guarda entero como JSON en "datos"; las columnas por
+   las que se busca (clave, mesa, estado...) las saca SQLite solita y tienen
+   indice. Ver codigo/d1/esquema.sql. */
+var D1_NOMBRES = {};
+D1_NOMBRES[TABLAS.config] = "config";
+D1_NOMBRES[TABLAS.pedidos] = "pedidos";
+D1_NOMBRES[TABLAS.ventas] = "ventas";
+D1_NOMBRES[TABLAS.productos] = "productos";
+D1_NOMBRES[TABLAS.egresos] = "egresos";
+D1_NOMBRES[TABLAS.cortes] = "cortes";
+D1_NOMBRES[TABLAS.impresion] = "impresion";
+D1_NOMBRES[TABLAS.movimientos] = "movimientos";
+D1_NOMBRES[TABLA_REPARTIDORES] = "repartidores";
+D1_NOMBRES[TABLA_CLIENTES] = "clientes";
+D1_NOMBRES[TABLA_RECARGAS] = "recargas";
+/* Las columnas generadas de esquema.sql. Tienen que ser las mismas. */
+var D1_INDICES = {
+  config: ["clave"],
+  pedidos: ["clave", "mesa", "estado", "sesion", "reparto", "repartidor_clave"],
+  ventas: ["clave", "fecha", "folio", "mesa"],
+  productos: ["clave", "activo"],
+  egresos: ["clave", "fecha"],
+  cortes: ["clave", "fecha"],
+  impresion: ["clave", "estado"],
+  movimientos: ["clave", "fecha", "producto"],
+  repartidores: ["clave", "activo"],
+  clientes: ["clave", "promotor", "producto", "estado", "origen"],
+  recargas: ["codigo", "usado", "clave"]
+};
+/* Lo que lleva la cuenta de los tropiezos de D1 (por isolate). */
+var D1_ESTADO = { copias: 0, errores: 0, saltadas: 0, ultimos: [], ultimoAviso: 0, pausaHasta: 0 };
+var D1_ESPERA_MS = 2500;
+function modoDatos(env) {
+  const m = String(env && env.DATOS || "").trim().toLowerCase();
+  if (m !== "doble" && m !== "d1") return "n8n";
+  if (!env.D1_BETO || typeof env.D1_BETO.prepare !== "function") return "n8n";
+  return m;
+}
+__name(modoDatos, "modoDatos");
+function d1Tabla(tablaId) {
+  const t = D1_NOMBRES[String(tablaId)];
+  if (!t) throw new Error("la tabla " + tablaId + " no tiene lugar en D1");
+  return t;
+}
+__name(d1Tabla, "d1Tabla");
+function d1Nombre(col) {
+  const c = String(col || "");
+  if (!/^[A-Za-z0-9_]+$/.test(c)) throw new Error("columna con nombre raro: " + c.slice(0, 40));
+  return c;
+}
+__name(d1Nombre, "d1Nombre");
+/* Como se lee una columna en SQL, con la misma regla que String() en JS. */
+function d1Col(t, col) {
+  const c = d1Nombre(col);
+  if (c === "id" || c === "createdAt" || c === "updatedAt") return c;
+  if ((D1_INDICES[t] || []).indexOf(c) > -1) return c;
+  const p = "'$." + '"' + c + '"' + "'";
+  return "(CASE json_type(datos," + p + ") WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' ELSE CAST(json_extract(datos," + p + ") AS TEXT) END)";
+}
+__name(d1Col, "d1Col");
+function d1Donde(t, condiciones) {
+  const partes = [], valores = [];
+  for (const c of condiciones || []) {
+    if (c.condition && c.condition !== "eq") throw new Error("D1: solo se sabe comparar con eq, no con " + c.condition);
+    const col = d1Col(t, c.columnName);
+    const v = String(c.value);
+    if (col === "id") {
+      if (/^[0-9]{1,15}$/.test(v)) { partes.push("id = ?"); valores.push(Number(v)); }
+      else partes.push("1 = 0");
+    } else {
+      partes.push(col + " = ?");
+      valores.push(v);
+    }
+  }
+  return { sql: partes.length ? " WHERE " + partes.join(" AND ") : "", valores };
+}
+__name(d1Donde, "d1Donde");
+function d1Fila(r) {
+  let d = {};
+  try { d = JSON.parse(r.datos || "{}") || {}; } catch (e) { d = {}; }
+  const f = { id: r.id };
+  for (const k of Object.keys(d)) if (k !== "id" && k !== "createdAt" && k !== "updatedAt") f[k] = d[k];
+  f.createdAt = r.createdAt;
+  f.updatedAt = r.updatedAt;
+  return f;
+}
+__name(d1Fila, "d1Fila");
+function d1Datos(fila) {
+  const d = {};
+  for (const k of Object.keys(fila || {})) {
+    if (k === "id" || k === "createdAt" || k === "updatedAt" || fila[k] === void 0) continue;
+    d[k] = fila[k];
+  }
+  return JSON.stringify(d);
+}
+__name(d1Datos, "d1Datos");
+function d1Igual(f, condiciones) {
+  return (condiciones || []).every(function(c) {
+    return String(f[c.columnName]) === String(c.value);
+  });
+}
+__name(d1Igual, "d1Igual");
+async function d1TraerCon(env, tablaId, condiciones) {
+  const t = d1Tabla(tablaId);
+  const w = d1Donde(t, condiciones);
+  const r = await env.D1_BETO.prepare("SELECT id, createdAt, updatedAt, datos FROM " + t + w.sql + " ORDER BY id")
+    .bind(...w.valores).all();
+  return (r.results || []).map(d1Fila).filter(function(f) { return d1Igual(f, condiciones); });
+}
+__name(d1TraerCon, "d1TraerCon");
+async function d1Insertar(env, tablaId, filas) {
+  const t = d1Tabla(tablaId);
+  const lista = (filas || []).filter(Boolean);
+  if (!lista.length) return [];
+  const ahora = new Date().toISOString();
+  const st = lista.map(function(f) {
+    return env.D1_BETO.prepare("INSERT INTO " + t + " (createdAt, updatedAt, datos) VALUES (?, ?, ?) RETURNING id, createdAt, updatedAt, datos")
+      .bind(ahora, ahora, d1Datos(f));
+  });
+  const rs = await env.D1_BETO.batch(st);
+  return rs.map(function(x) { return (x.results || [])[0]; }).filter(Boolean).map(d1Fila);
+}
+__name(d1Insertar, "d1Insertar");
+/* La copia de la escritura doble: el renglon tal cual lo devolvio n8n,
+   con su id. Si ya existia, se reemplaza: asi D1 se va emparejando solo.
+   Pero nunca con algo MAS VIEJO (updatedAt menor): si dos cambios llegan
+   cruzados, o si se carga un respaldo con la doble ya prendida, gana el nuevo. */
+async function d1Llenar(env) {
+  if (modoDatos(env) !== "doble" || !env.D1_BETO) return { ok: false, motivo: "solo en modo doble con D1" };
+  const candado = await stripeLee(env, "d1/llenado.json");
+  if (candado && Date.now() - Number(candado.ms || 0) < 120000) return { ok: false, motivo: "espera 2 minutos", ultimo: candado };
+  await stripeGuarda(env, "d1/llenado.json", { ms: Date.now(), estado: "corriendo" });
+  const sal = { ok: true, tablas: {}, errores: {} };
+  for (const id of Object.keys(D1_NOMBRES)) {
+    const nombre = D1_NOMBRES[id];
+    try {
+      const filas = await n8nTraerFilas(env, id);
+      sal.tablas[nombre] = { n8n: filas.length, copiadas: await d1Copiar(env, id, filas) };
+    } catch (e) { sal.errores[nombre] = String(e && e.message || e).slice(0, 120); }
+  }
+  sal.fecha = isoMX();
+  await stripeGuarda(env, "d1/llenado.json", { ms: Date.now(), estado: "listo", resultado: sal });
+  return sal;
+}
+async function d1Copiar(env, tablaId, filas) {
+  const t = d1Tabla(tablaId);
+  const buenas = (filas || []).filter(function(f) { return f && Number(f.id) > 0; });
+  if (!buenas.length) return 0;
+  const ahora = new Date().toISOString();
+  for (let i = 0; i < buenas.length; i += 50) {
+    const st = buenas.slice(i, i + 50).map(function(f) {
+      return env.D1_BETO.prepare("INSERT INTO " + t + " (id, createdAt, updatedAt, datos) VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT(id) DO UPDATE SET createdAt = excluded.createdAt, updatedAt = excluded.updatedAt, datos = excluded.datos " +
+        "WHERE excluded.updatedAt >= " + t + ".updatedAt")
+        .bind(Number(f.id), String(f.createdAt || ahora), String(f.updatedAt || ahora), d1Datos(f));
+    });
+    await env.D1_BETO.batch(st);
+  }
+  return buenas.length;
+}
+__name(d1Copiar, "d1Copiar");
+async function d1Actualizar(env, tablaId, condiciones, datos) {
+  const t = d1Tabla(tablaId);
+  const w = d1Donde(t, condiciones);
+  if (!w.sql) throw new Error("D1: no se actualiza una tabla entera sin condicion");
+  const llaves = Object.keys(datos || {}).filter(function(k) {
+    return datos[k] !== void 0 && k !== "id" && k !== "createdAt" && k !== "updatedAt";
+  });
+  let expr = "datos";
+  const vals = [];
+  if (llaves.length) {
+    expr = "json_set(datos";
+    for (const k of llaves) {
+      expr += ", '$." + '"' + d1Nombre(k) + '"' + "', json(?)";
+      vals.push(JSON.stringify(datos[k]));
+    }
+    expr += ")";
+  }
+  const r = await env.D1_BETO.prepare("UPDATE " + t + " SET datos = " + expr + ", updatedAt = ?" + w.sql +
+    " RETURNING id, createdAt, updatedAt, datos").bind(...vals, new Date().toISOString(), ...w.valores).all();
+  return (r.results || []).map(d1Fila);
+}
+__name(d1Actualizar, "d1Actualizar");
+async function d1QuitarIds(env, tablaId, clave, ids) {
+  const t = d1Tabla(tablaId);
+  const van = (ids || []).map(Number).filter(function(n) { return n > 0; });
+  if (!van.length) return [];
+  const r = await env.D1_BETO.prepare("DELETE FROM " + t + " WHERE " + d1Col(t, "clave") + " = ? AND id IN (" +
+    van.map(function() { return "?"; }).join(",") + ") RETURNING id").bind(String(clave), ...van).all();
+  return (r.results || []).map(function(x) { return { id: x.id }; });
+}
+__name(d1QuitarIds, "d1QuitarIds");
+/* Un tropiezo de D1 en la escritura doble. Nunca lanza: lo anota en memoria,
+   en la bitacora de D1 (si se puede) y le avisa a Edsi, como mucho cada hora. */
+async function d1Anota(env, que, tablaId, e) {
+  const tabla = D1_NOMBRES[String(tablaId)] || String(tablaId);
+  const error = String(e && e.message || e).slice(0, 200);
+  const en = new Date().toISOString();
+  D1_ESTADO.errores++;
+  D1_ESTADO.ultimos.push({ en, que, tabla, error });
+  if (D1_ESTADO.ultimos.length > 20) D1_ESTADO.ultimos.shift();
+  try { console.error("D1 escritura doble: " + que + " " + tabla + ": " + error); } catch (x) {}
+  /* Si D1 se colgo, no se le insiste: un minuto sin copiar para no hacer
+     esperar al cliente en cada escritura. Lo que no se copie lo ensena
+     /d1-compara, y se empareja recargando el respaldo. */
+  if (error.indexOf("tardo mas") > -1) {
+    D1_ESTADO.pausaHasta = Date.now() + 60e3;
+  } else {
+    let reloj = null;
+    try {
+      await Promise.race([
+        env.D1_BETO.prepare("INSERT INTO bitacora_d1 (en, que, tabla, error) VALUES (?, ?, ?, ?)").bind(en, que, tabla, error).run(),
+        new Promise(function(ok) { reloj = setTimeout(ok, 1500); })
+      ]);
+    } catch (x) {}
+    if (reloj) clearTimeout(reloj);
+  }
+  const ahora = Date.now();
+  if (ahora - D1_ESTADO.ultimoAviso < 3600e3) return;
+  D1_ESTADO.ultimoAviso = ahora;
+  try {
+    const marca = new Request("https://lacartamenu.com/__aviso_d1_ultimo");
+    const cache = typeof caches !== "undefined" && caches.default;
+    if (cache) {
+      if (await cache.match(marca)) return;
+      await cache.put(marca, new Response("1", { headers: { "cache-control": "max-age=3600" } }));
+    }
+  } catch (x) {}
+  try {
+    await avisaEdsiRed(env, "⚠️ <b>D1 (escritura doble)</b>\nNo pude copiar en D1 al " + que + " en <b>" + tabla +
+      "</b>.\nEl cliente no se entero: n8n si lo guardo.\n<i>" + error.replace(/[<>&]/g, " ") + "</i>\n\nTropiezos desde que arranco: " +
+      D1_ESTADO.errores + ". No te vuelvo a avisar en una hora. Detalle en /d1-compara.");
+  } catch (x) {}
+}
+__name(d1Anota, "d1Anota");
+async function d1Espejo(env, que, tablaId, hacer) {
+  if (Date.now() < D1_ESTADO.pausaHasta) { D1_ESTADO.saltadas++; return; }
+  let reloj = null;
+  try {
+    await Promise.race([
+      hacer(),
+      new Promise(function(ok, no) {
+        reloj = setTimeout(function() { no(new Error("D1 tardo mas de " + D1_ESPERA_MS / 1e3 + " segundos")); }, D1_ESPERA_MS);
+      })
+    ]);
+    D1_ESTADO.copias++;
+  } catch (e) {
+    await d1Anota(env, que, tablaId, e);
+  } finally {
+    if (reloj) clearTimeout(reloj);
+  }
+}
+__name(d1Espejo, "d1Espejo");
+
+/* Las cinco puertas de siempre. */
+async function traerFilas(env, tablaId, clave) {
+  if (modoDatos(env) !== "d1") return n8nTraerFilas(env, tablaId, clave);
+  const filas = await d1TraerCon(env, tablaId, clave ? [{ columnName: "clave", condition: "eq", value: String(clave) }] : []);
+  return clave ? filas.filter(function(f) { return String(f.clave) === String(clave); }) : filas;
+}
+__name(traerFilas, "traerFilas");
+async function traerCon(env, tablaId, condiciones) {
+  if (modoDatos(env) !== "d1") return n8nTraerCon(env, tablaId, condiciones);
+  return d1TraerCon(env, tablaId, condiciones);
+}
+__name(traerCon, "traerCon");
+async function insertarFilas(env, tablaId, filas) {
+  const modo = modoDatos(env);
+  if (modo === "d1") return d1Insertar(env, tablaId, filas);
+  const hechas = await n8nInsertarFilas(env, tablaId, filas);
+  if (modo === "doble") {
+    await d1Espejo(env, "insertar", tablaId, async function() {
+      const conId = hechas.filter(function(f) { return f && Number(f.id) > 0; });
+      if (conId.length < (filas || []).length) {
+        throw new Error("n8n no devolvio los renglones nuevos (" + conId.length + " de " + (filas || []).length + ")");
+      }
+      await d1Copiar(env, tablaId, conId);
+    });
+  }
+  return hechas;
+}
+__name(insertarFilas, "insertarFilas");
+async function actualizarFilas(env, tablaId, condiciones, datos) {
+  const modo = modoDatos(env);
+  if (modo === "d1") return d1Actualizar(env, tablaId, condiciones, datos);
+  const hechas = await n8nActualizarFilas(env, tablaId, condiciones, datos);
+  if (modo === "doble") {
+    await d1Espejo(env, "actualizar", tablaId, async function() {
+      /* Si n8n devolvio los renglones completos, se copian tal cual (asi se
+         empareja hasta lo que se le hubiera pasado a D1). Si no, se hace en
+         D1 el mismo cambio con las mismas condiciones. */
+      const completas = hechas.filter(function(f) { return f && Number(f.id) > 0 && f.createdAt; });
+      if (hechas.length && completas.length === hechas.length) await d1Copiar(env, tablaId, completas);
+      else await d1Actualizar(env, tablaId, condiciones, datos);
+    });
+  }
+  return hechas;
+}
+__name(actualizarFilas, "actualizarFilas");
+async function borrarPorIds(env, tablaId, clave, ids) {
+  const modo = modoDatos(env);
+  if (modo !== "d1") {
+    const idos = await n8nBorrarPorIds(env, tablaId, clave, ids);
+    if (modo === "doble") {
+      await d1Espejo(env, "borrar", tablaId, async function() {
+        await d1QuitarIds(env, tablaId, clave, idos.map(function(f) { return f && f.id; }));
+      });
+    }
+    return idos;
+  }
+  /* En D1, las mismas reglas que en n8n: solo con negocio, solo por numero,
+     maximo 150, y solo los numeros que de verdad son de ese negocio. */
+  const dueno = String(clave || "").trim();
+  if (!dueno) throw new Error("borrar sin negocio no se permite");
+  const quiere = (ids || []).map(Number).filter((n) => n > 0);
+  if (!quiere.length) return [];
+  if (quiere.length > 150) throw new Error("son demasiadas filas para quitarlas de un golpe");
+  const suyas = await traerFilas(env, tablaId, dueno);
+  const propias = new Set(suyas.map((f) => Number(f.id)));
+  const van = quiere.filter((n) => propias.has(n));
+  if (!van.length) return [];
+  return d1QuitarIds(env, tablaId, dueno, van);
+}
 __name(borrarPorIds, "borrarPorIds");
+
+/* /d1-compara: cuantos renglones hay en n8n y en D1, tabla por tabla. Con
+   un negocio (c), tambien que renglones faltan, sobran o no son iguales.
+   Es para vigilar la escritura doble antes de pasar a "d1". */
+function d1Mismo(a, b) {
+  const va = a === void 0 || a === null ? "" : (typeof a === "object" ? JSON.stringify(a) : String(a));
+  const vb = b === void 0 || b === null ? "" : (typeof b === "object" ? JSON.stringify(b) : String(b));
+  return va === vb;
+}
+__name(d1Mismo, "d1Mismo");
+async function d1Compara(env, o) {
+  const hay = !!(env.D1_BETO && typeof env.D1_BETO.prepare === "function");
+  const salida = {
+    ok: true, version: VERSION_BETO, modo: modoDatos(env), pidio: String(env.DATOS || "(nada)"),
+    d1_conectada: hay, negocio: o.clave || "(todos)", tablas: [],
+    esta_copia: { copias: D1_ESTADO.copias, errores: D1_ESTADO.errores, saltadas: D1_ESTADO.saltadas, ultimos: D1_ESTADO.ultimos }
+  };
+  if (!hay) { salida.ok = false; salida.error = "este Worker no tiene el binding D1_BETO"; return salida; }
+  for (const id of Object.keys(D1_NOMBRES)) {
+    const t = D1_NOMBRES[id];
+    if (o.tabla && o.tabla !== t) continue;
+    const r = { tabla: t, n8n: null, d1: null };
+    let deN8n = null;
+    try {
+      deN8n = await n8nTraerFilas(env, id, o.clave || null);
+      let mx = 0;
+      for (const f of deN8n) if (Number(f.id) > mx) mx = Number(f.id);
+      r.n8n = { filas: deN8n.length, max_id: mx, tope: deN8n.length >= 1e4 };
+    } catch (e) { r.n8n = { error: String(e && e.message || e).slice(0, 160) }; }
+    try {
+      const w = o.clave ? " WHERE " + d1Col(t, "clave") + " = ?" : "";
+      const x = await env.D1_BETO.prepare("SELECT COUNT(*) AS n, MAX(id) AS m FROM " + t + w).bind(...(o.clave ? [String(o.clave)] : [])).first();
+      r.d1 = { filas: Number(x && x.n || 0), max_id: Number(x && x.m || 0) };
+    } catch (e) { r.d1 = { error: String(e && e.message || e).slice(0, 160) }; }
+    r.igual = !!(r.n8n && r.d1 && !r.n8n.error && !r.d1.error && r.n8n.filas === r.d1.filas && r.n8n.max_id === r.d1.max_id);
+    if (o.detalle && o.clave && deN8n && r.d1 && !r.d1.error) {
+      const deD1 = await d1TraerCon(env, id, [{ columnName: "clave", condition: "eq", value: String(o.clave) }]);
+      const porId = new Map(deD1.map(function(f) { return [Number(f.id), f]; }));
+      const faltan = [], distintos = [];
+      let tipos = 0, fecha = 0;
+      for (const a of deN8n) {
+        const b = porId.get(Number(a.id));
+        if (!b) { faltan.push(Number(a.id)); continue; }
+        porId.delete(Number(a.id));
+        const campos = [];
+        for (const k of new Set(Object.keys(a).concat(Object.keys(b)))) {
+          if (k === "updatedAt") { if (!d1Mismo(a[k], b[k])) fecha++; continue; }
+          if (!d1Mismo(a[k], b[k])) campos.push(k);
+          else if (a[k] !== null && a[k] !== void 0 && b[k] !== null && b[k] !== void 0 && typeof a[k] !== typeof b[k]) tipos++;
+        }
+        if (campos.length) distintos.push({ id: Number(a.id), campos });
+      }
+      r.diferencias = {
+        faltan_en_d1: faltan.slice(0, 30), cuantos_faltan: faltan.length,
+        sobran_en_d1: [...porId.keys()].slice(0, 30), cuantos_sobran: porId.size,
+        distintos: distintos.slice(0, 30), cuantos_distintos: distintos.length,
+        tipo_distinto: tipos, solo_fecha_de_cambio_distinta: fecha
+      };
+      if (faltan.length || porId.size || distintos.length) r.igual = false;
+    }
+    salida.tablas.push(r);
+  }
+  try {
+    const b = await env.D1_BETO.prepare("SELECT en, que, tabla, error FROM bitacora_d1 ORDER BY id DESC LIMIT 20").all();
+    salida.bitacora = b.results || [];
+  } catch (e) { salida.bitacora = { error: String(e && e.message || e).slice(0, 160) }; }
+  salida.todo_igual = salida.tablas.every(function(r) { return r.igual; });
+  return salida;
+}
+__name(d1Compara, "d1Compara");
 function empacar(filas, tipo, clave) {
   const datos = filas.filter((j) => j && j.id !== void 0 && j.id !== null).filter((j) => clave ? String(j.clave) === String(clave) : true).map((j) => {
     const limpio = {};
@@ -38537,7 +38941,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.59";  // version: "2.9.59"
+var VERSION_BETO = "2.9.61";  // version: "2.9.61"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -43270,7 +43674,7 @@ await chatAvisar(env, cfg,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
     }
-    if (!env.N8N_KEY) {
+    if (!env.N8N_KEY && modoDatos(env) !== "d1") {
       return json({ ok: false, error: "Falta el secreto N8N_KEY en el Worker" }, 500);
     }
     /* LA RAIZ PELONA DEL SUBDOMINIO ES LA PUERTA DE LA CASA.
@@ -43296,6 +43700,28 @@ await chatAvisar(env, cfg,
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" }
       });
     }
+    if (ruta === "/d1-llenar" && request.method === "POST") {
+      let salida;
+      try { salida = await d1Llenar(env); } catch (e) { salida = { ok: false, motivo: String(e && e.message || e).slice(0, 120) }; }
+      return json(salida, 200);
+    }
+    if (ruta === "/d1-compara") {
+      const b = await leerCuerpo(request);
+      try {
+        pideAdmin(env, { admin: b.admin || request.headers.get("x-llave-admin") || "" });
+      } catch (e) {
+        return json({ ok: false, error: String(e && e.message || e) }, 403);
+      }
+      try {
+        return json(await d1Compara(env, {
+          clave: String(b.c || b.clave || "").trim(),
+          tabla: String(b.tabla || "").trim(),
+          detalle: !!b.detalle
+        }));
+      } catch (e) {
+        return json({ ok: false, error: String(e && e.message || e).slice(0, 300) }, 502);
+      }
+    }
     if (ruta === "/estado") {
       try {
         const r = await fetch(N8N + "/api/v1/data-tables?limit=50", { headers: cabeceras(env) });
@@ -43312,6 +43738,7 @@ await chatAvisar(env, cfg,
           version: VERSION_BETO,
           llave: "presente",
           n8n_status: r.status,
+          datos: modoDatos(env),
           bot_red: await (async () => {
             const token = String(env.TG_RED || "").trim();
             if (!token) return { hay: false };

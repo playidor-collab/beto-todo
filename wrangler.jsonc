@@ -5,7 +5,7 @@
   "preview_urls": true,
   "compatibility_date": "2025-01-01",
   "keep_vars": true,
-  "vars": { "COBRO_SOLO": "buentaco", "MP_APP_ID": "7526447272444426", "MP_PKCE": "si" },
+  "vars": { "COBRO_SOLO": "buentaco", "MP_APP_ID": "7526447272444426", "MP_PKCE": "si", "DATOS": "doble" },
   "triggers": { "crons": ["0 15 * * *"] },
   "routes": [
     {
@@ -16,6 +16,9 @@
       "pattern": "*.lacartamenu.com/*",
       "zone_name": "lacartamenu.com"
     }
+  ],
+  "d1_databases": [
+    { "binding": "D1_BETO", "database_name": "beto-datos", "database_id": "a316f701-dae8-4373-98b4-b23a6b5891f8" }
   ],
   "r2_buckets": [
     {
