@@ -28045,6 +28045,29 @@ async function d1Compara(env, o) {
   return salida;
 }
 __name(d1Compara, "d1Compara");
+async function d1ReporteDiario(env) {
+  if (modoDatos(env) !== "doble" || !env.D1_BETO) return null;
+  const c = await d1Compara(env, {});
+  const malas = c.tablas.filter(function(r) { return !r.igual; });
+  const n = function(x) { return x && x.filas != null ? Number(x.filas).toLocaleString("en-US") : "?"; };
+  const bit = Array.isArray(c.bitacora) ? c.bitacora : [];
+  const hoy = Date.now() - 864e5;
+  const recientes = bit.filter(function(b) { const t = Date.parse(b.en || ""); return isFinite(t) && t > hoy; }).length;
+  let txt;
+  if (!malas.length) {
+    const p = c.tablas.find(function(r) { return r.tabla === "pedidos"; });
+    txt = "\u{1F5C4}️ <b>Base nueva de La Carta: todo cuadra ✅</b>\nLas " + c.tablas.length + " tablas son iguales en n8n y en la base nueva" +
+      (p ? " (pedidos: " + n(p.d1) + ")" : "") + ".";
+  } else {
+    txt = "\u{1F5C4}️ <b>Base nueva de La Carta: hay diferencias ⚠️</b>\n" + malas.map(function(r) {
+      return "· " + r.tabla + ": n8n " + n(r.n8n) + " / nueva " + n(r.d1) + (r.n8n && r.n8n.error ? " (n8n falló)" : "") + (r.d1 && r.d1.error ? " (la nueva falló)" : "");
+    }).join("\n") + "\nNo afecta a los clientes: la página sigue leyendo de n8n. Avísale a Claude.";
+  }
+  if (recientes) txt += "\nErrores de copia en las últimas 24 h: " + recientes + ".";
+  await avisaEdsiRed(env, txt);
+  return { ok: true, igual: !malas.length };
+}
+__name(d1ReporteDiario, "d1ReporteDiario");
 function empacar(filas, tipo, clave) {
   const datos = filas.filter((j) => j && j.id !== void 0 && j.id !== null).filter((j) => clave ? String(j.clave) === String(clave) : true).map((j) => {
     const limpio = {};
@@ -38941,7 +38964,7 @@ __name(avisarCobro, "avisarCobro");
    /estado decia 171 y /dominio decia 170 al mismo tiempo. Un dato
    que miente sobre que version corre cuesta media hora de buscar
    un problema que no existe. */
-var VERSION_BETO = "2.9.61";  // version: "2.9.61"
+var VERSION_BETO = "2.9.62";  // version: "2.9.62"
 /* ------------------------------------------------------------------ */
 /* La pagina del video. El QR de la caja apunta aqui y esta direccion no
    cambia nunca. El video vive en el almacen, no en el codigo. */
@@ -42479,6 +42502,7 @@ var worker_beto_todo_default = {
   async scheduled(evento, env, ctx) {
     ctx.waitUntil(revisarSuscripciones(env, false).catch(() => {}));
     ctx.waitUntil(cobroRenuevaTodos(env).catch(() => {}));
+    ctx.waitUntil(d1ReporteDiario(env).catch(() => {}));
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
